@@ -1,5 +1,5 @@
 
-const OPENAI_API_KEY = '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';
+const OPENROUTER_API_KEY = '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';
 
 export interface OpenAIResponse {
   content: string;
@@ -20,14 +20,16 @@ export const generateAIResponse = async (
       { role: 'user' as const, content: message }
     ];
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'HTTP-Referer': window.location.origin,
+        'X-Title': 'AI Chatbot Platform',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'deepseek/deepseek-r1-0528:free',
         messages,
         max_tokens: 200,
         temperature: 0.7,
@@ -36,7 +38,7 @@ export const generateAIResponse = async (
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      throw new Error(`OpenRouter API error: ${response.status}`);
     }
 
     const data = await response.json();
@@ -46,7 +48,7 @@ export const generateAIResponse = async (
       isFromAI: true
     };
   } catch (error) {
-    console.error('OpenAI API Error:', error);
+    console.error('OpenRouter API Error:', error);
     return {
       content: "I'm having trouble connecting to my AI service right now. Please try again later.",
       isFromAI: false
