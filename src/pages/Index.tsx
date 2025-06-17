@@ -1,4 +1,3 @@
-
 import { Bot, MessageSquare, Settings, Plus, Eye, Edit3, Zap, Users, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -186,6 +185,7 @@ const Index = () => {
               </CardHeader>
               <CardContent className="text-center">
                 <Button 
+                  onClick={() => navigate("/edit-chatbot")}
                   className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-semibold py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
                   size="lg"
                 >
