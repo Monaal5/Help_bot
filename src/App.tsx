@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import CreateChatbot from "./pages/CreateChatbot";
 import ViewSessions from "./pages/ViewSessions";
 import EditChatbot from "./pages/EditChatbot";
+import ChatbotPage from "./pages/ChatbotPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ const App = () => (
           <Route path="/create-chatbot" element={<CreateChatbot />} />
           <Route path="/view-sessions" element={<ViewSessions />} />
           <Route path="/edit-chatbot" element={<EditChatbot />} />
+          <Route path="/chat/:chatbotId" element={<ChatbotPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
