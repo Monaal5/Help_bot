@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { ArrowLeft, Bot, Copy, FileText, Upload, Globe, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { initializeChatbotKnowledge } from "@/services/chatbotService";
 
 const CreateChatbot = () => {
   const navigate = useNavigate();
@@ -37,6 +37,9 @@ const CreateChatbot = () => {
 
     setIsCreating(true);
     
+    // Initialize the knowledge base with provided data
+    initializeChatbotKnowledge(textData, files);
+    
     // Simulate chatbot creation
     setTimeout(() => {
       const url = generateChatbotUrl(chatbotName);
@@ -46,9 +49,9 @@ const CreateChatbot = () => {
       
       toast({
         title: "Success!",
-        description: "Your chatbot has been created successfully",
+        description: "Your chatbot has been created with custom knowledge base",
       });
-    }, 2000);
+    }, 3000); // Increased time to show knowledge processing
   };
 
   const copyUrlToClipboard = () => {
@@ -102,7 +105,7 @@ const CreateChatbot = () => {
                     Chatbot Configuration
                   </CardTitle>
                   <CardDescription>
-                    Set up your chatbot's basic information and behavior
+                    Set up your chatbot's basic information and knowledge base
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -126,6 +129,9 @@ const CreateChatbot = () => {
                       onChange={(e) => setTextData(e.target.value)}
                       className="min-h-[120px] resize-none"
                     />
+                    <p className="text-xs text-gray-500">
+                      Add custom knowledge that your chatbot will use to answer questions
+                    </p>
                   </div>
 
                   <Button
@@ -134,7 +140,7 @@ const CreateChatbot = () => {
                     className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
                     size="lg"
                   >
-                    {isCreating ? "Creating..." : "Create Chatbot"}
+                    {isCreating ? "Creating & Processing Knowledge..." : "Create Chatbot"}
                   </Button>
                 </CardContent>
               </Card>
@@ -190,11 +196,11 @@ const CreateChatbot = () => {
                   )}
 
                   <div className="bg-blue-50 p-4 rounded-lg">
-                    <h4 className="font-medium text-sm mb-2">Supported Formats:</h4>
+                    <h4 className="font-medium text-sm mb-2">How it works:</h4>
                     <ul className="text-xs text-gray-600 space-y-1">
-                      <li>• PDF documents</li>
-                      <li>• Word documents (.doc, .docx)</li>
-                      <li>• Plain text files (.txt)</li>
+                      <li>• Upload documents to create a custom knowledge base</li>
+                      <li>• Chatbot will prioritize your content for answers</li>
+                      <li>• Falls back to AI for questions outside your data</li>
                     </ul>
                   </div>
                 </CardContent>
@@ -209,7 +215,7 @@ const CreateChatbot = () => {
                 </div>
                 <CardTitle className="text-2xl">Chatbot Created Successfully!</CardTitle>
                 <CardDescription>
-                  Your chatbot "{chatbotName}" is now ready to use
+                  Your intelligent chatbot "{chatbotName}" is ready with custom knowledge base
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -233,7 +239,7 @@ const CreateChatbot = () => {
                     </Button>
                   </div>
                   <p className="text-xs text-gray-500">
-                    Share this URL with anyone to let them chat with your bot
+                    Your chatbot will answer from your knowledge base first, then use AI for other questions
                   </p>
                 </div>
 

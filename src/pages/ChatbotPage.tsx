@@ -1,19 +1,21 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { Bot, Send, User, Loader2 } from "lucide-react";
+import { Bot, Send, User, Loader2, Brain, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { generateChatbotResponse } from "@/services/chatbotService";
 
 interface Message {
   id: string;
   content: string;
   sender: "user" | "bot";
   timestamp: Date;
+  source?: 'knowledge-base' | 'ai' | 'fallback';
 }
 
 interface UserInfo {
@@ -30,12 +32,12 @@ const ChatbotPage = () => {
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [chatbotName, setChatbotName] = useState("AI Assistant");
+  const [conversationHistory, setConversationHistory] = useState<Array<{role: 'user' | 'assistant', content: string}>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Mock chatbot data - in real app this would come from API
   useEffect(() => {
     if (chatbotId) {
-      // Simulate fetching chatbot info
       const mockChatbots: { [key: string]: string } = {
         "customer-support-bot-abc123": "Customer Support Bot",
         "sales-assistant-def456": "Sales Assistant",
@@ -71,9 +73,10 @@ const ChatbotPage = () => {
     // Add welcome message
     const welcomeMessage: Message = {
       id: "welcome",
-      content: `Hello ${userInfo.name}! I'm ${chatbotName}. How can I help you today?`,
+      content: `Hello ${userInfo.name}! I'm ${chatbotName}. I can answer questions based on my knowledge base or use AI to help with other topics. How can I assist you today?`,
       sender: "bot",
-      timestamp: new Date()
+      timestamp: new Date(),
+      source: 'knowledge-base'
     };
     setMessages([welcomeMessage]);
 
@@ -95,52 +98,66 @@ const ChatbotPage = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    
+    // Update conversation history
+    const newHistory = [...conversationHistory, { role: 'user' as const, content: inputMessage }];
+    setConversationHistory(newHistory);
+    
     setInputMessage("");
     setIsLoading(true);
 
-    // Simulate bot response
-    setTimeout(() => {
+    try {
+      // Get intelligent response
+      const response = await generateChatbotResponse(inputMessage, chatbotName, newHistory);
+      
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: generateBotResponse(inputMessage, chatbotName),
+        content: response.content,
         sender: "bot",
-        timestamp: new Date()
+        timestamp: new Date(),
+        source: response.source
       };
+      
       setMessages(prev => [...prev, botResponse]);
+      
+      // Update conversation history with bot response
+      setConversationHistory(prev => [...prev, { role: 'assistant' as const, content: response.content }]);
+      
+    } catch (error) {
+      console.error('Error generating response:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: "I'm sorry, I encountered an error while processing your message. Please try again.",
+        sender: "bot",
+        timestamp: new Date(),
+        source: 'fallback'
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsLoading(false);
-    }, 1000 + Math.random() * 2000);
+    }
   };
 
-  const generateBotResponse = (userMessage: string, botName: string): string => {
-    const responses: { [key: string]: string[] } = {
-      "Customer Support Bot": [
-        "I'd be happy to help you with your inquiry. Can you provide more details about the issue?",
-        "Thank you for contacting support. Let me assist you with that.",
-        "I understand your concern. Here's what I can do to help...",
-        "For account-related issues, please verify your account details first."
-      ],
-      "Sales Assistant": [
-        "Great question! Let me help you find the perfect product for your needs.",
-        "I'd love to show you our latest offerings. What are you looking for?",
-        "That's an excellent choice! Would you like to know more about pricing?",
-        "I can help you with that purchase. Let me guide you through the process."
-      ],
-      "FAQ Bot": [
-        "Here's the information about that topic from our FAQ...",
-        "That's a commonly asked question. Here's the answer:",
-        "According to our policies, here's what you need to know:",
-        "Let me check our knowledge base for the most current information."
-      ]
-    };
+  const getSourceIcon = (source?: string) => {
+    switch (source) {
+      case 'knowledge-base':
+        return <Database className="h-3 w-3 text-blue-500" />;
+      case 'ai':
+        return <Brain className="h-3 w-3 text-purple-500" />;
+      default:
+        return <Bot className="h-3 w-3 text-gray-500" />;
+    }
+  };
 
-    const botResponses = responses[botName] || [
-      "Thank you for your message. How can I assist you further?",
-      "I'm here to help! Could you please provide more details?",
-      "That's interesting. Let me help you with that.",
-      "I understand. Here's what I can tell you about that topic."
-    ];
-
-    return botResponses[Math.floor(Math.random() * botResponses.length)];
+  const getSourceLabel = (source?: string) => {
+    switch (source) {
+      case 'knowledge-base':
+        return 'Knowledge Base';
+      case 'ai':
+        return 'AI Generated';
+      default:
+        return 'Bot';
+    }
   };
 
   return (
@@ -192,7 +209,7 @@ const ChatbotPage = () => {
               </div>
               <div>
                 <h1 className="font-bold text-lg">{chatbotName}</h1>
-                <p className="text-sm text-gray-600">AI Assistant</p>
+                <p className="text-sm text-gray-600">Intelligent AI Assistant with Custom Knowledge</p>
               </div>
             </div>
           </div>
@@ -226,9 +243,17 @@ const ChatbotPage = () => {
                       : "bg-gray-100 text-gray-900"
                   }`}>
                     <p className="text-sm">{message.content}</p>
-                    <p className="text-xs mt-1 opacity-70">
-                      {message.timestamp.toLocaleTimeString()}
-                    </p>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs opacity-70">
+                        {message.timestamp.toLocaleTimeString()}
+                      </p>
+                      {message.sender === "bot" && message.source && (
+                        <div className="flex items-center gap-1 text-xs opacity-70">
+                          {getSourceIcon(message.source)}
+                          <span>{getSourceLabel(message.source)}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -241,7 +266,7 @@ const ChatbotPage = () => {
                   <div className="bg-gray-100 px-4 py-2 rounded-lg">
                     <div className="flex items-center space-x-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-sm text-gray-600">Typing...</span>
+                      <span className="text-sm text-gray-600">Thinking...</span>
                     </div>
                   </div>
                 </div>
@@ -256,7 +281,7 @@ const ChatbotPage = () => {
                 <Input
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  placeholder="Type your message..."
+                  placeholder="Ask me anything..."
                   className="flex-1"
                   disabled={isLoading}
                 />
