@@ -8,7 +8,7 @@ export interface Chatbot {
   created_at: string;
   updated_at: string;
   is_active: boolean;
-  settings: Record<string, any>;
+  settings: any; // Changed from Record<string, any> to any to handle Json type
 }
 
 export interface Document {
@@ -21,7 +21,7 @@ export interface Document {
   file_size?: number;
   file_url?: string;
   status: 'processing' | 'completed' | 'failed';
-  metadata: Record<string, any>;
+  metadata: any; // Changed from Record<string, any> to any
   created_at: string;
   updated_at: string;
 }
@@ -31,7 +31,7 @@ export interface ChatSession {
   chatbot_id: string;
   user_name?: string;
   user_email?: string;
-  session_data: Record<string, any>;
+  session_data: any; // Changed from Record<string, any> to any
   created_at: string;
   updated_at: string;
   is_active: boolean;
@@ -43,7 +43,7 @@ export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   response_source?: 'knowledge_base' | 'generative' | 'hybrid';
-  metadata: Record<string, any>;
+  metadata: any; // Changed from Record<string, any> to any
   created_at: string;
 }
 
@@ -54,8 +54,8 @@ export interface KnowledgeEntry {
   answer: string;
   keywords?: string[];
   source_document_id?: string;
-  embedding?: number[];
-  metadata: Record<string, any>;
+  embedding?: any; // Changed from number[] to any to handle string from DB
+  metadata: any; // Changed from Record<string, any> to any
   created_at: string;
   updated_at: string;
 }

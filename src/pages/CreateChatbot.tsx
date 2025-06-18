@@ -1,220 +1,142 @@
-import React, { useState } from "react";
+
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { useUser } from "@clerk/clerk-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Bot, Loader2, Sparkles } from "lucide-react";
-import { useUser } from "@clerk/clerk-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createChatbot, addKnowledgeEntry, uploadDocument } from "@/services/supabaseChatbotService";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { supabaseChatbotService } from "@/services/supabaseChatbotService";
 
-const CreateChatbot = () => {
-  const { user } = useUser();
-  const queryClient = useQueryClient();
+export default function CreateChatbot() {
   const navigate = useNavigate();
+  const { user } = useUser();
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState(
-    "You are a helpful AI assistant."
-  );
-  const [textData, setTextData] = useState("");
-  const [files, setFiles] = useState<FileList | null>(null);
-
-  const createChatbotMutation = useMutation({
-    mutationFn: async (data: {
-      name: string;
-      description: string;
-      systemPrompt: string;
-      textData: string;
-      files: FileList | null;
-    }) => {
-      if (!user?.id) throw new Error('User not authenticated');
-      
-      // Create chatbot
-      const chatbot = await createChatbot(
-        data.name,
-        data.description,
-        data.systemPrompt,
-        user.id
-      );
-
-      // Add text data as knowledge if provided
-      if (data.textData.trim()) {
-        await addKnowledgeEntry(
-          chatbot.id,
-          `General Knowledge`,
-          data.textData,
-          ['general', 'text-data']
-        );
-      }
-
-      // Process uploaded files
-      if (data.files && data.files.length > 0) {
-        for (const file of Array.from(data.files)) {
-          // For demo purposes, we'll just add the filename as knowledge
-          // In a real app, you'd extract text content from PDFs
-          await uploadDocument(
-            chatbot.id,
-            file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
-            `This document contains information about ${file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ")}`,
-            file.name,
-            file.type
-          );
-        }
-      }
-
-      return chatbot;
-    },
-    onSuccess: (chatbot) => {
-      toast({
-        title: "Success!",
-        description: `Chatbot "${chatbot.name}" created successfully.`,
-      });
-      queryClient.invalidateQueries({ queryKey: ['chatbots'] });
-      navigate('/');
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create chatbot",
-        variant: "destructive",
-      });
-    },
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    systemPrompt: ""
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!name.trim()) {
+    if (!user) {
       toast({
-        title: "Error",
-        description: "Please enter a chatbot name",
         variant: "destructive",
+        description: "You must be logged in to create a chatbot."
       });
       return;
     }
 
-    createChatbotMutation.mutate({
-      name,
-      description,
-      systemPrompt,
-      textData,
-      files,
-    });
+    if (!formData.name.trim()) {
+      toast({
+        variant: "destructive",
+        description: "Please enter a name for your chatbot."
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      const chatbot = await supabaseChatbotService.createChatbot({
+        name: formData.name,
+        description: formData.description,
+        system_prompt: formData.systemPrompt,
+        clerk_user_id: user.id
+      });
+
+      toast({
+        description: "Chatbot created successfully!"
+      });
+
+      navigate(`/`);
+    } catch (error) {
+      console.error('Error creating chatbot:', error);
+      toast({
+        variant: "destructive",
+        description: "Failed to create chatbot. Please try again."
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFiles(e.target.files);
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-6">
-      <header className="max-w-4xl mx-auto mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">
-          Create Your AI Chatbot
-        </h1>
-        <p className="text-gray-600">
-          Customize your chatbot's name, description, and behavior. Add
-          knowledge by uploading files or entering text data.
-        </p>
-      </header>
-      
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="max-w-2xl mx-auto pt-8">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bot className="w-6 h-6 text-blue-600" />
-              Create New AI Chatbot
+            <CardTitle className="text-2xl font-bold text-gray-800">
+              Create New Chatbot
             </CardTitle>
             <CardDescription>
-              Build your custom AI assistant with personalized knowledge and behavior
+              Set up your AI chatbot with custom knowledge and personality
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <Label htmlFor="name">Chatbot Name</Label>
+              <div className="space-y-2">
+                <Label htmlFor="name">Chatbot Name *</Label>
                 <Input
-                  type="text"
                   id="name"
+                  type="text"
                   placeholder="Enter chatbot name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={formData.name}
+                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  required
                 />
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea
                   id="description"
-                  placeholder="Enter a brief description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Describe what your chatbot does"
+                  value={formData.description}
+                  onChange={(e) => handleInputChange('description', e.target.value)}
+                  rows={3}
                 />
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="systemPrompt">System Prompt</Label>
                 <Textarea
                   id="systemPrompt"
-                  placeholder="Define the chatbot's behavior"
-                  value={systemPrompt}
-                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  placeholder="Define your chatbot's personality and behavior"
+                  value={formData.systemPrompt}
+                  onChange={(e) => handleInputChange('systemPrompt', e.target.value)}
+                  rows={4}
                 />
               </div>
 
-              <div>
-                <Label htmlFor="textData">
-                  Additional Knowledge (Text Data)
-                </Label>
-                <Textarea
-                  id="textData"
-                  placeholder="Enter any additional knowledge for the chatbot"
-                  value={textData}
-                  onChange={(e) => setTextData(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="files">Upload Files (PDF, TXT, etc.)</Label>
-                <Input
-                  type="file"
-                  id="files"
-                  multiple
-                  onChange={handleFileChange}
-                />
-              </div>
-              
-              <div className="flex gap-4 pt-4">
-                <Button 
-                  type="submit" 
+              <div className="flex gap-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate("/")}
                   className="flex-1"
-                  disabled={createChatbotMutation.isPending}
                 >
-                  {createChatbotMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      Create Chatbot
-                    </>
-                  )}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => navigate('/')}>
                   Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="flex-1"
+                >
+                  {isLoading ? "Creating..." : "Create Chatbot"}
                 </Button>
               </div>
             </form>
@@ -223,6 +145,4 @@ const CreateChatbot = () => {
       </div>
     </div>
   );
-};
-
-export default CreateChatbot;
+}

@@ -1,243 +1,229 @@
 
 import { supabase } from "@/integrations/supabase/client";
-import { generateAIResponse } from './openaiService';
-import type { Chatbot, ChatSession, Message, KnowledgeEntry, ChatbotResponse } from '../types/database';
+import { Chatbot, ChatSession, Message, KnowledgeEntry, Document } from "@/types/database";
 
-export const createChatbot = async (
-  name: string,
-  description: string,
-  systemPrompt: string,
-  clerkUserId: string
-): Promise<Chatbot> => {
-  const { data, error } = await supabase
-    .from('chatbots')
-    .insert({
-      name,
-      description,
-      system_prompt: systemPrompt,
-      clerk_user_id: clerkUserId,
-    })
-    .select()
-    .single();
+export class SupabaseChatbotService {
+  async createChatbot(data: {
+    name: string;
+    description?: string;
+    system_prompt?: string;
+    clerk_user_id: string;
+    settings?: any;
+  }): Promise<Chatbot> {
+    const { data: chatbot, error } = await supabase
+      .from('chatbots')
+      .insert([{
+        name: data.name,
+        description: data.description,
+        system_prompt: data.system_prompt,
+        clerk_user_id: data.clerk_user_id,
+        settings: data.settings || {}
+      }])
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
-};
-
-export const getChatbots = async (clerkUserId: string): Promise<Chatbot[]> => {
-  const { data, error } = await supabase
-    .from('chatbots')
-    .select('*')
-    .eq('clerk_user_id', clerkUserId)
-    .eq('is_active', true)
-    .order('created_at', { ascending: false });
-
-  if (error) throw error;
-  return data || [];
-};
-
-export const getChatbot = async (id: string): Promise<Chatbot | null> => {
-  const { data, error } = await supabase
-    .from('chatbots')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (error) return null;
-  return data;
-};
-
-export const createChatSession = async (
-  chatbotId: string,
-  userName?: string,
-  userEmail?: string
-): Promise<ChatSession> => {
-  const { data, error } = await supabase
-    .from('chat_sessions')
-    .insert({
-      chatbot_id: chatbotId,
-      user_name: userName,
-      user_email: userEmail,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
-};
-
-export const addMessage = async (
-  sessionId: string,
-  role: 'user' | 'assistant',
-  content: string,
-  responseSource?: 'knowledge_base' | 'generative' | 'hybrid'
-): Promise<Message> => {
-  const { data, error } = await supabase
-    .from('messages')
-    .insert({
-      session_id: sessionId,
-      role,
-      content,
-      response_source: responseSource,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
-};
-
-export const getSessionMessages = async (sessionId: string): Promise<Message[]> => {
-  const { data, error } = await supabase
-    .from('messages')
-    .select('*')
-    .eq('session_id', sessionId)
-    .order('created_at', { ascending: true });
-
-  if (error) throw error;
-  return data || [];
-};
-
-export const searchKnowledgeBase = async (
-  chatbotId: string,
-  query: string
-): Promise<KnowledgeEntry[]> => {
-  // Simple text search for now - you can enhance this with vector search later
-  const { data, error } = await supabase
-    .from('knowledge_entries')
-    .select('*')
-    .eq('chatbot_id', chatbotId)
-    .or(`question.ilike.%${query}%,answer.ilike.%${query}%`)
-    .limit(3);
-
-  if (error) throw error;
-  return data || [];
-};
-
-export const generateChatbotResponse = async (
-  message: string,
-  chatbotId: string,
-  sessionId: string
-): Promise<ChatbotResponse> => {
-  console.log(`Processing message: "${message}" for chatbot: ${chatbotId}`);
-  
-  // Get chatbot details
-  const chatbot = await getChatbot(chatbotId);
-  if (!chatbot) {
-    throw new Error('Chatbot not found');
+    if (error) throw error;
+    return chatbot as Chatbot; // Type assertion to handle Json type conversion
   }
 
-  // First, try to find a response in the knowledge base
-  const knowledgeEntries = await searchKnowledgeBase(chatbotId, message);
-  
-  if (knowledgeEntries.length > 0) {
-    console.log('Found response in knowledge base');
-    const bestMatch = knowledgeEntries[0];
-    
-    // Save the message and response
-    await addMessage(sessionId, 'user', message);
-    await addMessage(sessionId, 'assistant', bestMatch.answer, 'knowledge_base');
-    
-    return {
-      content: bestMatch.answer,
-      source: 'knowledge-base',
-      isFromAI: false
-    };
+  async getChatbotsByUser(clerkUserId: string): Promise<Chatbot[]> {
+    const { data: chatbots, error } = await supabase
+      .from('chatbots')
+      .select('*')
+      .eq('clerk_user_id', clerkUserId)
+      .eq('is_active', true);
+
+    if (error) throw error;
+    return (chatbots || []) as Chatbot[]; // Type assertion
   }
 
-  // If no knowledge base match, use OpenRouter AI
-  console.log('No knowledge base match, using AI');
-  
-  // Get conversation history for context
-  const messages = await getSessionMessages(sessionId);
-  const conversationHistory = messages.slice(-6).map(msg => ({
-    role: msg.role as 'user' | 'assistant',
-    content: msg.content
-  }));
+  async getChatbotById(id: string): Promise<Chatbot | null> {
+    const { data: chatbot, error } = await supabase
+      .from('chatbots')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-  // Save user message first
-  await addMessage(sessionId, 'user', message);
-
-  const aiResponse = await generateAIResponse(
-    message, 
-    chatbot.name, 
-    conversationHistory
-  );
-  
-  // Save AI response
-  await addMessage(sessionId, 'assistant', aiResponse.content, 'generative');
-  
-  return {
-    content: aiResponse.content,
-    source: 'ai',
-    isFromAI: aiResponse.isFromAI
-  };
-};
-
-export const addKnowledgeEntry = async (
-  chatbotId: string,
-  question: string,
-  answer: string,
-  keywords?: string[]
-): Promise<KnowledgeEntry> => {
-  const { data, error } = await supabase
-    .from('knowledge_entries')
-    .insert({
-      chatbot_id: chatbotId,
-      question,
-      answer,
-      keywords,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
-};
-
-export const uploadDocument = async (
-  chatbotId: string,
-  title: string,
-  content: string,
-  fileName?: string,
-  fileType?: string
-): Promise<any> => {
-  const { data, error } = await supabase
-    .from('documents')
-    .insert({
-      chatbot_id: chatbotId,
-      title,
-      content,
-      file_name: fileName,
-      file_type: fileType,
-      status: 'completed'
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  
-  // For now, we'll just add the content as a knowledge entry
-  // In a real implementation, you'd chunk the content and create embeddings
-  if (content.length > 0) {
-    await addKnowledgeEntry(
-      chatbotId,
-      `Document: ${title}`,
-      content.substring(0, 1000) + (content.length > 1000 ? '...' : ''),
-      [title, fileName].filter(Boolean) as string[]
-    );
+    if (error) throw error;
+    return chatbot as Chatbot; // Type assertion
   }
 
-  return data;
-};
+  async updateChatbot(id: string, updates: Partial<Chatbot>): Promise<Chatbot> {
+    const { data: chatbot, error } = await supabase
+      .from('chatbots')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
 
-export const getChatSessions = async (chatbotId: string): Promise<ChatSession[]> => {
-  const { data, error } = await supabase
-    .from('chat_sessions')
-    .select('*')
-    .eq('chatbot_id', chatbotId)
-    .order('created_at', { ascending: false });
+    if (error) throw error;
+    return chatbot as Chatbot; // Type assertion
+  }
 
-  if (error) throw error;
-  return data || [];
-};
+  async createChatSession(chatbotId: string, userData?: { name?: string; email?: string }): Promise<ChatSession> {
+    const { data: session, error } = await supabase
+      .from('chat_sessions')
+      .insert([{
+        chatbot_id: chatbotId,
+        user_name: userData?.name,
+        user_email: userData?.email,
+        session_data: {}
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return session as ChatSession; // Type assertion
+  }
+
+  async addMessage(sessionId: string, message: {
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    response_source?: 'knowledge_base' | 'generative' | 'hybrid';
+    metadata?: any;
+  }): Promise<Message> {
+    const { data: newMessage, error } = await supabase
+      .from('messages')
+      .insert([{
+        session_id: sessionId,
+        role: message.role,
+        content: message.content,
+        response_source: message.response_source,
+        metadata: message.metadata || {}
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return newMessage as Message; // Type assertion
+  }
+
+  async getMessagesBySession(sessionId: string): Promise<Message[]> {
+    const { data: messages, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return (messages || []) as Message[]; // Type assertion
+  }
+
+  async searchKnowledgeBase(chatbotId: string, query: string): Promise<KnowledgeEntry[]> {
+    // Simple text search for now - in production you'd use vector similarity
+    const { data: entries, error } = await supabase
+      .from('knowledge_entries')
+      .select('*')
+      .eq('chatbot_id', chatbotId)
+      .ilike('question', `%${query}%`);
+
+    if (error) throw error;
+    return (entries || []) as KnowledgeEntry[]; // Type assertion
+  }
+
+  async addKnowledgeEntry(data: {
+    chatbot_id: string;
+    question: string;
+    answer: string;
+    keywords?: string[];
+    source_document_id?: string;
+    metadata?: any;
+  }): Promise<KnowledgeEntry> {
+    const { data: entry, error } = await supabase
+      .from('knowledge_entries')
+      .insert([{
+        chatbot_id: data.chatbot_id,
+        question: data.question,
+        answer: data.answer,
+        keywords: data.keywords || [],
+        source_document_id: data.source_document_id,
+        metadata: data.metadata || {}
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return entry as KnowledgeEntry; // Type assertion
+  }
+
+  async createDocument(data: {
+    chatbot_id: string;
+    title: string;
+    content?: string;
+    file_name?: string;
+    file_type?: string;
+    file_size?: number;
+    file_url?: string;
+    metadata?: any;
+  }): Promise<Document> {
+    const { data: document, error } = await supabase
+      .from('documents')
+      .insert([{
+        chatbot_id: data.chatbot_id,
+        title: data.title,
+        content: data.content,
+        file_name: data.file_name,
+        file_type: data.file_type,
+        file_size: data.file_size,
+        file_url: data.file_url,
+        status: 'processing',
+        metadata: data.metadata || {}
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return document as Document; // Type assertion
+  }
+
+  async updateDocumentStatus(documentId: string, status: 'processing' | 'completed' | 'failed'): Promise<void> {
+    const { error } = await supabase
+      .from('documents')
+      .update({ status })
+      .eq('id', documentId);
+
+    if (error) throw error;
+  }
+
+  async getDocumentsByChatbot(chatbotId: string): Promise<Document[]> {
+    const { data: documents, error } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('chatbot_id', chatbotId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (documents || []) as Document[]; // Type assertion
+  }
+
+  async getChatSessionsByChatbot(chatbotId: string): Promise<ChatSession[]> {
+    const { data: sessions, error } = await supabase
+      .from('chat_sessions')
+      .select('*')
+      .eq('chatbot_id', chatbotId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (sessions || []) as ChatSession[]; // Type assertion
+  }
+
+  async logAnalytics(data: {
+    chatbot_id: string;
+    session_id?: string;
+    event_type: string;
+    event_data?: any;
+  }): Promise<void> {
+    const { error } = await supabase
+      .from('analytics')
+      .insert([{
+        chatbot_id: data.chatbot_id,
+        session_id: data.session_id,
+        event_type: data.event_type,
+        event_data: data.event_data || {}
+      }]);
+
+    if (error) throw error;
+  }
+}
+
+export const supabaseChatbotService = new SupabaseChatbotService();
