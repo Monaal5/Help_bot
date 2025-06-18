@@ -9,55 +9,48 @@ import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-
-interface Chatbot {
-  id: string;
-  name: string;
-  textData: string;
-  createdAt: string;
-  status: "active" | "inactive";
-  url: string;
-}
+import { useUser } from "@clerk/clerk-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabaseChatbotService } from "@/services/supabaseChatbotService";
+import { Chatbot } from "@/types/database";
 
 const EditChatbot = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [chatbots, setChatbots] = useState<Chatbot[]>([]);
+  const { user } = useUser();
+  const queryClient = useQueryClient();
   const [selectedChatbot, setSelectedChatbot] = useState<Chatbot | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
 
-  // Mock data for existing chatbots
-  useEffect(() => {
-    const mockChatbots: Chatbot[] = [
-      {
-        id: "1",
-        name: "Customer Support Bot",
-        textData: "You are a helpful customer support assistant. Answer questions about our products and services.",
-        createdAt: "2024-06-15",
-        status: "active",
-        url: `${window.location.origin}/chat/customer-support-bot-abc123`
-      },
-      {
-        id: "2",
-        name: "Sales Assistant",
-        textData: "You are a sales assistant. Help customers find the right products and guide them through the purchase process.",
-        createdAt: "2024-06-14",
-        status: "active",
-        url: `${window.location.origin}/chat/sales-assistant-def456`
-      },
-      {
-        id: "3",
-        name: "FAQ Bot",
-        textData: "Answer frequently asked questions about our company policies, shipping, and returns.",
-        createdAt: "2024-06-13",
-        status: "inactive",
-        url: `${window.location.origin}/chat/faq-bot-ghi789`
-      }
-    ];
-    setChatbots(mockChatbots);
-  }, []);
+  // Get chatbots for the current user
+  const { data: chatbots = [], isLoading } = useQuery({
+    queryKey: ['chatbots', user?.id],
+    queryFn: () => supabaseChatbotService.getChatbotsByUser(user?.id || ''),
+    enabled: !!user?.id,
+  });
+
+  // Update chatbot mutation
+  const updateChatbotMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string, updates: Partial<Chatbot> }) =>
+      supabaseChatbotService.updateChatbot(id, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chatbots'] });
+      setIsEditing(false);
+      toast({
+        title: "Success!",
+        description: "Chatbot updated successfully",
+      });
+    },
+    onError: (error) => {
+      console.error('Update error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update chatbot",
+        variant: "destructive",
+      });
+    },
+  });
 
   const filteredChatbots = chatbots.filter(bot =>
     bot.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -71,53 +64,75 @@ const EditChatbot = () => {
   const handleSaveChanges = async () => {
     if (!selectedChatbot) return;
 
-    setIsSaving(true);
-    
-    // Simulate saving
-    setTimeout(() => {
-      setChatbots(prev => 
-        prev.map(bot => 
-          bot.id === selectedChatbot.id ? selectedChatbot : bot
-        )
-      );
-      setIsSaving(false);
-      setIsEditing(false);
-      
-      toast({
-        title: "Success!",
-        description: "Chatbot updated successfully",
-      });
-    }, 1500);
-  };
-
-  const handleDeleteChatbot = (chatbotId: string) => {
-    setChatbots(prev => prev.filter(bot => bot.id !== chatbotId));
-    if (selectedChatbot?.id === chatbotId) {
-      setSelectedChatbot(null);
-      setIsEditing(false);
-    }
-    
-    toast({
-      title: "Deleted",
-      description: "Chatbot deleted successfully",
+    updateChatbotMutation.mutate({
+      id: selectedChatbot.id,
+      updates: {
+        name: selectedChatbot.name,
+        description: selectedChatbot.description,
+        system_prompt: selectedChatbot.system_prompt,
+      }
     });
   };
 
-  const toggleStatus = (chatbotId: string) => {
-    setChatbots(prev => 
-      prev.map(bot => 
-        bot.id === chatbotId 
-          ? { ...bot, status: bot.status === "active" ? "inactive" : "active" }
-          : bot
-      )
-    );
-    
-    if (selectedChatbot?.id === chatbotId) {
-      setSelectedChatbot(prev => 
-        prev ? { ...prev, status: prev.status === "active" ? "inactive" : "active" } : null
-      );
+  const handleDeleteChatbot = async (chatbotId: string) => {
+    try {
+      await supabaseChatbotService.updateChatbot(chatbotId, { is_active: false });
+      queryClient.invalidateQueries({ queryKey: ['chatbots'] });
+      
+      if (selectedChatbot?.id === chatbotId) {
+        setSelectedChatbot(null);
+        setIsEditing(false);
+      }
+      
+      toast({
+        title: "Deleted",
+        description: "Chatbot deleted successfully",
+      });
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete chatbot",
+        variant: "destructive",
+      });
     }
   };
+
+  const toggleStatus = async (chatbotId: string) => {
+    const chatbot = chatbots.find(bot => bot.id === chatbotId);
+    if (!chatbot) return;
+
+    try {
+      await supabaseChatbotService.updateChatbot(chatbotId, { 
+        is_active: !chatbot.is_active 
+      });
+      queryClient.invalidateQueries({ queryKey: ['chatbots'] });
+      
+      if (selectedChatbot?.id === chatbotId) {
+        setSelectedChatbot(prev => 
+          prev ? { ...prev, is_active: !prev.is_active } : null
+        );
+      }
+    } catch (error) {
+      console.error('Toggle status error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update chatbot status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <Bot className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+          <p className="text-gray-600">Loading chatbots...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -182,11 +197,13 @@ const EditChatbot = () => {
                   >
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="font-medium text-sm">{chatbot.name}</h3>
-                      <Badge variant={chatbot.status === "active" ? "default" : "secondary"}>
-                        {chatbot.status}
+                      <Badge variant={chatbot.is_active ? "default" : "secondary"}>
+                        {chatbot.is_active ? "active" : "inactive"}
                       </Badge>
                     </div>
-                    <p className="text-xs text-gray-500">Created: {chatbot.createdAt}</p>
+                    <p className="text-xs text-gray-500">
+                      Created: {new Date(chatbot.created_at || '').toLocaleDateString()}
+                    </p>
                     <div className="flex gap-1 mt-2">
                       <Button
                         size="sm"
@@ -197,7 +214,7 @@ const EditChatbot = () => {
                         }}
                         className="text-xs px-2 py-1 h-6"
                       >
-                        {chatbot.status === "active" ? "Deactivate" : "Activate"}
+                        {chatbot.is_active ? "Deactivate" : "Activate"}
                       </Button>
                       <Button
                         size="sm"
@@ -237,8 +254,8 @@ const EditChatbot = () => {
                         Modify your chatbot's configuration and behavior
                       </CardDescription>
                     </div>
-                    <Badge variant={selectedChatbot.status === "active" ? "default" : "secondary"}>
-                      {selectedChatbot.status}
+                    <Badge variant={selectedChatbot.is_active ? "default" : "secondary"}>
+                      {selectedChatbot.is_active ? "active" : "inactive"}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -259,17 +276,33 @@ const EditChatbot = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="editTextData">Knowledge Base (Text)</Label>
-                    <Textarea
-                      id="editTextData"
-                      value={selectedChatbot.textData}
+                    <Label htmlFor="editDescription">Description</Label>
+                    <Input
+                      id="editDescription"
+                      value={selectedChatbot.description || ''}
                       onChange={(e) => {
                         setSelectedChatbot(prev => 
-                          prev ? { ...prev, textData: e.target.value } : null
+                          prev ? { ...prev, description: e.target.value } : null
                         );
                         setIsEditing(true);
                       }}
-                      className="min-h-[150px] resize-none"
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="editSystemPrompt">System Prompt</Label>
+                    <Textarea
+                      id="editSystemPrompt"
+                      value={selectedChatbot.system_prompt || ''}
+                      onChange={(e) => {
+                        setSelectedChatbot(prev => 
+                          prev ? { ...prev, system_prompt: e.target.value } : null
+                        );
+                        setIsEditing(true);
+                      }}
+                      className="min-h-[100px] resize-none"
+                      placeholder="Define how your chatbot should behave..."
                     />
                   </div>
 
@@ -277,13 +310,13 @@ const EditChatbot = () => {
                     <Label>Chatbot URL</Label>
                     <div className="flex gap-2">
                       <Input
-                        value={selectedChatbot.url}
+                        value={`${window.location.origin}/chat/${selectedChatbot.id}`}
                         readOnly
                         className="bg-gray-50 font-mono text-sm"
                       />
                       <Button
                         onClick={() => {
-                          navigator.clipboard.writeText(selectedChatbot.url);
+                          navigator.clipboard.writeText(`${window.location.origin}/chat/${selectedChatbot.id}`);
                           toast({
                             title: "Copied!",
                             description: "URL copied to clipboard",
@@ -300,29 +333,44 @@ const EditChatbot = () => {
                   <div className="bg-yellow-50 p-4 rounded-lg">
                     <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
                       <FileText className="h-4 w-4" />
-                      File Management
+                      OpenRouter API Configuration
                     </h4>
                     <p className="text-xs text-gray-600 mb-3">
-                      Upload additional documents to enhance your chatbot's knowledge base
+                      Configure your OpenRouter API key to enable AI responses
                     </p>
-                    <Button variant="outline" size="sm">
-                      Manage Files
-                    </Button>
+                    <div className="space-y-2">
+                      <Label htmlFor="apiKey">OpenRouter API Key</Label>
+                      <Input
+                        id="apiKey"
+                        type="password"
+                        placeholder="Enter your OpenRouter API key..."
+                        onChange={(e) => {
+                          localStorage.setItem('openrouter_api_key', e.target.value);
+                        }}
+                        className="text-sm"
+                      />
+                      <p className="text-xs text-gray-500">
+                        Get your API key from <a href="https://openrouter.ai/keys" target="_blank" className="text-blue-600 hover:underline">OpenRouter</a>
+                      </p>
+                    </div>
                   </div>
 
                   {isEditing && (
                     <div className="flex gap-4 pt-4 border-t">
                       <Button
                         onClick={handleSaveChanges}
-                        disabled={isSaving}
+                        disabled={updateChatbotMutation.isPending}
                         className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
                       >
                         <Save className="h-4 w-4 mr-2" />
-                        {isSaving ? "Saving..." : "Save Changes"}
+                        {updateChatbotMutation.isPending ? "Saving..." : "Save Changes"}
                       </Button>
                       <Button
                         onClick={() => {
-                          handleSelectChatbot(chatbots.find(bot => bot.id === selectedChatbot.id)!);
+                          const originalChatbot = chatbots.find(bot => bot.id === selectedChatbot.id);
+                          if (originalChatbot) {
+                            setSelectedChatbot(originalChatbot);
+                          }
                           setIsEditing(false);
                         }}
                         variant="outline"

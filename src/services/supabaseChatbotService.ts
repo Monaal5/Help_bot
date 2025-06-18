@@ -1,6 +1,6 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { Chatbot, ChatSession, Message, KnowledgeEntry, Document } from "@/types/database";
+import { generateOpenRouterResponse } from "./openRouterService";
 
 export class SupabaseChatbotService {
   async createChatbot(data: {
@@ -114,7 +114,7 @@ export class SupabaseChatbotService {
       .from('knowledge_entries')
       .select('*')
       .eq('chatbot_id', chatbotId)
-      .ilike('question', `%${query}%`);
+      .or(`question.ilike.%${query}%,answer.ilike.%${query}%,keywords.cs.{${query}}`);
 
     if (error) throw error;
     return (entries || []) as KnowledgeEntry[];
@@ -234,27 +234,97 @@ export const createChatSession = (chatbotId: string, userData?: { name?: string;
   supabaseChatbotService.createChatSession(chatbotId, userData);
 export const getSessionMessages = (sessionId: string) => supabaseChatbotService.getMessagesBySession(sessionId);
 
-// Mock function for generateChatbotResponse - this would integrate with OpenRouter in production
+// Updated generateChatbotResponse function with OpenRouter integration
 export const generateChatbotResponse = async (message: string, chatbotId: string, sessionId: string) => {
-  // Log the user message
-  await supabaseChatbotService.addMessage(sessionId, {
-    role: 'user',
-    content: message
-  });
+  console.log(`Generating response for message: "${message}" in chatbot: ${chatbotId}`);
+  
+  try {
+    // Get chatbot details
+    const chatbot = await supabaseChatbotService.getChatbotById(chatbotId);
+    if (!chatbot) {
+      throw new Error('Chatbot not found');
+    }
 
-  // For now, return a simple response - this would be replaced with OpenRouter integration
-  const response = {
-    content: "I'm a chatbot assistant. This is a placeholder response. OpenRouter integration would be implemented here.",
-    source: 'generative' as const,
-    isFromAI: true
-  };
+    // Log the user message first
+    await supabaseChatbotService.addMessage(sessionId, {
+      role: 'user',
+      content: message
+    });
 
-  // Log the assistant response
-  await supabaseChatbotService.addMessage(sessionId, {
-    role: 'assistant',
-    content: response.content,
-    response_source: 'generative'
-  });
+    // Search knowledge base first
+    const knowledgeEntries = await supabaseChatbotService.searchKnowledgeBase(chatbotId, message);
+    
+    let response: string;
+    let responseSource: 'knowledge_base' | 'generative' = 'generative';
 
-  return response;
+    if (knowledgeEntries.length > 0) {
+      // Use knowledge base if relevant entries found
+      console.log('Found relevant knowledge entries:', knowledgeEntries.length);
+      response = knowledgeEntries[0].answer;
+      responseSource = 'knowledge_base';
+    } else {
+      // Use OpenRouter for generative response
+      console.log('No knowledge base match, using OpenRouter');
+      
+      // For now, use a placeholder API key - this should be configured in environment
+      const apiKey = localStorage.getItem('openrouter_api_key') || 'YOUR_OPENROUTER_API_KEY';
+      
+      if (apiKey === 'YOUR_OPENROUTER_API_KEY') {
+        response = "Please configure your OpenRouter API key to enable AI responses. You can set it in the chatbot settings.";
+      } else {
+        // Get conversation history
+        const previousMessages = await supabaseChatbotService.getMessagesBySession(sessionId);
+        
+        // Build messages array for OpenRouter
+        const messages = [
+          {
+            role: 'system' as const,
+            content: chatbot.system_prompt || 'You are a helpful AI assistant.'
+          },
+          // Add recent conversation history (last 10 messages)
+          ...previousMessages.slice(-10).map(msg => ({
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content
+          }))
+        ];
+
+        try {
+          response = await generateOpenRouterResponse(messages, apiKey);
+        } catch (error) {
+          console.error('OpenRouter error:', error);
+          response = "I'm sorry, I'm having trouble generating a response right now. Please try again later.";
+        }
+      }
+    }
+
+    // Log the assistant response
+    await supabaseChatbotService.addMessage(sessionId, {
+      role: 'assistant',
+      content: response,
+      response_source: responseSource
+    });
+
+    return {
+      content: response,
+      source: responseSource,
+      isFromAI: responseSource === 'generative'
+    };
+
+  } catch (error) {
+    console.error('Error generating chatbot response:', error);
+    
+    // Log error response
+    const errorResponse = "I'm sorry, I encountered an error while processing your message. Please try again.";
+    await supabaseChatbotService.addMessage(sessionId, {
+      role: 'assistant',
+      content: errorResponse,
+      response_source: 'generative'
+    });
+
+    return {
+      content: errorResponse,
+      source: 'generative' as const,
+      isFromAI: false
+    };
+  }
 };
