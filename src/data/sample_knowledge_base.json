@@ -1,0 +1,60 @@
+{
+  "entries": [
+    {
+      "question": "What is TalkLink?",
+      "answer": "TalkLink is an AI-powered chatbot platform that helps businesses create and manage intelligent chatbots. It allows you to build custom chatbots that can understand and respond to customer queries using your own knowledge base.",
+      "category": "Product Information",
+      "subcategory": "Overview",
+      "keywords": ["platform", "chatbot", "ai", "intelligent", "custom"]
+    },
+    {
+      "question": "How do I create a new chatbot?",
+      "answer": "To create a new chatbot, go to the dashboard and click the 'Create New Chatbot' button. You'll need to provide a name for your chatbot and optionally set a system prompt. After creation, you can add knowledge base entries and customize the chatbot's behavior.",
+      "category": "Getting Started",
+      "subcategory": "Creation",
+      "keywords": ["create", "new", "dashboard", "name", "system prompt"]
+    },
+    {
+      "question": "What are the pricing plans?",
+      "answer": "TalkLink offers three pricing tiers: Basic, Pro, and Enterprise. The Basic plan includes 1 chatbot and 1000 messages per month. The Pro plan includes 5 chatbots and 5000 messages. The Enterprise plan offers unlimited chatbots and messages with custom features.",
+      "category": "Pricing",
+      "subcategory": "Plans",
+      "keywords": ["pricing", "plans", "basic", "pro", "enterprise", "messages"]
+    },
+    {
+      "question": "How do I add knowledge to my chatbot?",
+      "answer": "You can add knowledge to your chatbot in three ways: 1) Manually add Q&A pairs in the knowledge base, 2) Import a JSON file with knowledge entries, or 3) Upload documents that will be processed and added to the knowledge base automatically.",
+      "category": "Knowledge Base",
+      "subcategory": "Management",
+      "keywords": ["knowledge", "add", "import", "upload", "documents", "qa"]
+    },
+    {
+      "question": "What file formats are supported for document upload?",
+      "answer": "TalkLink currently supports PDF, TXT, and DOCX files for document upload. The system will extract text from these documents and create knowledge entries automatically. Maximum file size is 10MB per document.",
+      "category": "Knowledge Base",
+      "subcategory": "Documents",
+      "keywords": ["files", "format", "pdf", "txt", "docx", "upload", "size"]
+    },
+    {
+      "question": "How does the AI response generation work?",
+      "answer": "TalkLink uses advanced language models to generate responses. When a user asks a question, the system first checks the knowledge base for exact or similar matches. If no match is found, it uses the AI model to generate a contextual response based on the conversation history and available knowledge.",
+      "category": "Technical",
+      "subcategory": "AI",
+      "keywords": ["ai", "response", "generation", "language model", "context"]
+    },
+    {
+      "question": "Can I customize the chatbot's appearance?",
+      "answer": "Yes, you can customize your chatbot's appearance through the settings panel. You can change the colors, fonts, chat window size, and add your company logo. These customizations help maintain your brand identity in customer interactions.",
+      "category": "Customization",
+      "subcategory": "Appearance",
+      "keywords": ["customize", "appearance", "colors", "fonts", "logo", "brand"]
+    },
+    {
+      "question": "How do I track chatbot performance?",
+      "answer": "TalkLink provides detailed analytics in the dashboard. You can track metrics like message volume, response times, user satisfaction, and knowledge base usage. The analytics help you understand how your chatbot is performing and identify areas for improvement.",
+      "category": "Analytics",
+      "subcategory": "Performance",
+      "keywords": ["track", "analytics", "metrics", "performance", "dashboard"]
+    }
+  ]
+} 

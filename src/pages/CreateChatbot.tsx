@@ -1,16 +1,17 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
+import { supabaseChatbotService } from "@/services/supabaseChatbotService";
+import { DocumentProcessor } from "@/services/documentProcessor";
+import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@clerk/clerk-react";
-import { Button } from "@/components/ui/button";
+import { Plus, Trash2, Upload, Bot, Loader2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/hooks/use-toast";
-import { supabaseChatbotService } from "@/services/supabaseChatbotService";
-import { Plus, Trash2, Upload, Bot } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface KnowledgeEntry {
   question: string;
@@ -20,99 +21,23 @@ interface KnowledgeEntry {
 
 export default function CreateChatbot() {
   const navigate = useNavigate();
-  const { user } = useUser();
+  const { user: clerkUser } = useUser();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-
+  const [chatbotId, setChatbotId] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<File[]>([]);
+  const [processingDocuments, setProcessingDocuments] = useState<Record<string, boolean>>({});
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    systemPrompt: ""
+    system_prompt: "",
   });
-
   const [knowledgeEntries, setKnowledgeEntries] = useState<KnowledgeEntry[]>([
     { question: "", answer: "", keywords: [] }
   ]);
 
-  const [documents, setDocuments] = useState<File[]>([]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!user) {
-      toast({
-        variant: "destructive",
-        description: "You must be logged in to create a chatbot."
-      });
-      return;
-    }
-
-    if (!formData.name.trim()) {
-      toast({
-        variant: "destructive",
-        description: "Please enter a name for your chatbot."
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    
-    try {
-      // Create the chatbot first
-      const chatbot = await supabaseChatbotService.createChatbot({
-        name: formData.name,
-        description: formData.description,
-        system_prompt: formData.systemPrompt,
-        clerk_user_id: user.id
-      });
-
-      // Add knowledge entries if any are provided
-      for (const entry of knowledgeEntries) {
-        if (entry.question.trim() && entry.answer.trim()) {
-          await supabaseChatbotService.addKnowledgeEntry({
-            chatbot_id: chatbot.id,
-            question: entry.question,
-            answer: entry.answer,
-            keywords: entry.keywords.filter(k => k.trim() !== "")
-          });
-        }
-      }
-
-      // Handle document uploads if any
-      for (const file of documents) {
-        await supabaseChatbotService.createDocument({
-          chatbot_id: chatbot.id,
-          title: file.name,
-          file_name: file.name,
-          file_type: file.type,
-          file_size: file.size,
-          // In a real implementation, you'd upload the file to storage first
-          // and get the URL, but for now we'll just store the metadata
-          metadata: { uploaded_at: new Date().toISOString() }
-        });
-      }
-
-      toast({
-        description: "Chatbot created successfully!"
-      });
-
-      navigate(`/`);
-    } catch (error) {
-      console.error('Error creating chatbot:', error);
-      toast({
-        variant: "destructive",
-        description: "Failed to create chatbot. Please try again."
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+  const handleInputChange = (field: keyof typeof formData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const addKnowledgeEntry = () => {
@@ -134,9 +59,124 @@ export default function CreateChatbot() {
     updateKnowledgeEntry(index, 'keywords', keywordArray);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!clerkUser) {
+      toast({
+        variant: "destructive",
+        description: "You must be logged in to create a chatbot."
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const chatbot = await supabaseChatbotService.createChatbot({
+        name: formData.name,
+        description: formData.description,
+        system_prompt: formData.system_prompt,
+        clerk_user_id: clerkUser.id
+      });
+
+      setChatbotId(chatbot.id);
+
+      // Add knowledge entries
+      for (const entry of knowledgeEntries) {
+        if (entry.question.trim() && entry.answer.trim()) {
+          await supabaseChatbotService.addKnowledgeEntry({
+            chatbot_id: chatbot.id,
+            question: entry.question,
+            answer: entry.answer,
+            keywords: entry.keywords
+          });
+        }
+      }
+
+      toast({
+        description: "Chatbot created successfully!"
+      });
+      
+      // Navigate to home page instead of edit page
+      navigate('/');
+    } catch (error) {
+      console.error('Error creating chatbot:', error);
+      toast({
+        variant: "destructive",
+        description: "Failed to create chatbot. Please try again."
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
     setDocuments(prev => [...prev, ...files]);
+    setIsLoading(true);
+
+    try {
+      if (!clerkUser?.id) {
+        throw new Error('User must be authenticated to upload files');
+      }
+
+      // Only process files if we already have a chatbot ID
+      if (!chatbotId) {
+        toast({
+          variant: "destructive",
+          description: "Please create the chatbot first before uploading files."
+        });
+        setDocuments(prev => prev.filter(doc => !files.includes(doc)));
+        return;
+      }
+
+      // Process each file
+      for (const file of files) {
+        setProcessingDocuments(prev => ({ ...prev, [file.name]: true }));
+        try {
+          const processedDoc = await DocumentProcessor.processDocument(file, chatbotId);
+          
+          // Store the document in Supabase
+          await supabaseChatbotService.createDocument({
+            chatbot_id: chatbotId,
+            title: file.name,
+            file_name: file.name,
+            file_type: file.type,
+            file_size: file.size,
+            content: processedDoc.content,
+            metadata: {
+              ...processedDoc.metadata,
+              uploaded_at: new Date().toISOString()
+            }
+          });
+
+          toast({
+            title: "Success!",
+            description: `Successfully processed ${file.name}`,
+          });
+        } catch (error) {
+          console.error('Error processing document:', error);
+          toast({
+            title: "Error",
+            description: `Failed to process ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            variant: "destructive",
+          });
+        } finally {
+          setProcessingDocuments(prev => ({ ...prev, [file.name]: false }));
+        }
+      }
+    } catch (error) {
+      console.error('Error in file upload:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to process files',
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const removeDocument = (index: number) => {
@@ -144,25 +184,12 @@ export default function CreateChatbot() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-4xl mx-auto pt-8">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <Bot className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <CardTitle className="text-2xl font-bold text-gray-800">
-                  Create New Chatbot
-                </CardTitle>
-                <CardDescription>
-                  Set up your AI chatbot with custom knowledge and personality
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h1 className="text-2xl font-bold mb-6">Create New Chatbot</h1>
+            
             <form onSubmit={handleSubmit} className="space-y-6">
               <Tabs defaultValue="basic" className="w-full">
                 <TabsList className="grid w-full grid-cols-3">
@@ -172,37 +199,34 @@ export default function CreateChatbot() {
                 </TabsList>
 
                 <TabsContent value="basic" className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Chatbot Name *</Label>
+                  <div>
+                    <Label htmlFor="name">Chatbot Name</Label>
                     <Input
                       id="name"
-                      type="text"
-                      placeholder="Enter chatbot name"
+                      required
                       value={formData.name}
                       onChange={(e) => handleInputChange('name', e.target.value)}
-                      required
                     />
                   </div>
 
-                  <div className="space-y-2">
+                  <div>
                     <Label htmlFor="description">Description</Label>
                     <Textarea
                       id="description"
-                      placeholder="Describe what your chatbot does"
                       value={formData.description}
                       onChange={(e) => handleInputChange('description', e.target.value)}
                       rows={3}
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="systemPrompt">System Prompt</Label>
+                  <div>
+                    <Label htmlFor="systemPrompt">Give your information to change the chatbot. Just add you and your to make the response valid.</Label>
                     <Textarea
                       id="systemPrompt"
-                      placeholder="Define your chatbot's personality and behavior"
-                      value={formData.systemPrompt}
-                      onChange={(e) => handleInputChange('systemPrompt', e.target.value)}
-                      rows={4}
+                      placeholder="Give your information to change the chatbot. Just add you and your to make the response valid."
+                      value={formData.system_prompt}
+                      onChange={(e) => handleInputChange('system_prompt', e.target.value)}
+                      rows={8}
                     />
                   </div>
                 </TabsContent>
@@ -275,59 +299,75 @@ export default function CreateChatbot() {
 
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                     <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                    <p className="text-sm text-gray-600 mb-2">Upload documents (PDF, TXT, DOC)</p>
-                    <Input
+                    <p className="text-sm text-gray-600 mb-2">Upload PDF or DOCX files</p>
+                    <input
                       type="file"
                       multiple
-                      accept=".pdf,.txt,.doc,.docx"
+                      accept=".pdf,.docx"
                       onChange={handleFileUpload}
-                      className="max-w-xs mx-auto"
+                      className="hidden"
+                      id="file-upload"
                     />
+                    <label
+                      htmlFor="file-upload"
+                      className="cursor-pointer inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                    >
+                      Select Files
+                    </label>
                   </div>
 
                   {documents.length > 0 && (
-                    <div className="space-y-2">
-                      <Label>Uploaded Documents</Label>
-                      <div className="space-y-2">
-                        {documents.map((file, index) => (
-                          <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                            <span className="text-sm">{file.name}</span>
-                            <Button
+                    <div className="mt-4 space-y-2">
+                      {documents.map((file, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-2 bg-gray-50 rounded"
+                        >
+                          <span className="text-sm">{file.name}</span>
+                          <div className="flex items-center space-x-2">
+                            {processingDocuments[file.name] && (
+                              <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                            )}
+                            <button
                               type="button"
-                              variant="outline"
-                              size="sm"
                               onClick={() => removeDocument(index)}
+                              className="text-red-600 hover:text-red-800"
                             >
                               <Trash2 className="w-4 h-4" />
-                            </Button>
+                            </button>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </TabsContent>
               </Tabs>
 
-              <div className="flex gap-4 pt-6 border-t">
+              <div className="flex justify-end space-x-4">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => navigate("/")}
-                  className="flex-1"
+                  onClick={() => navigate(-1)}
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="flex-1"
                 >
-                  {isLoading ? "Creating..." : "Create Chatbot"}
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin inline" />
+                      Creating...
+                    </>
+                  ) : (
+                    'Create Chatbot'
+                  )}
                 </Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,3 @@
-
 export interface Chatbot {
   id: string;
   name: string;
@@ -58,6 +57,10 @@ export interface KnowledgeEntry {
   metadata: any; // Changed from Record<string, any> to any
   created_at: string;
   updated_at: string;
+  category?: string | null;
+  subcategory?: string | null;
+  is_duplicate?: boolean;
+  similarity_score?: number | null;
 }
 
 export interface ChatbotResponse {

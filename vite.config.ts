@@ -8,6 +8,9 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    hmr: {
+      overlay: true,
+    },
   },
   plugins: [
     react(),
@@ -17,6 +20,14 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  optimizeDeps: {
+    include: ['pdfjs-dist/build/pdf'],
+  },
+  build: {
+    commonjsOptions: {
+      include: [/pdfjs-dist/],
     },
   },
 }));

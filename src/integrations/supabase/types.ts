@@ -221,57 +221,53 @@ export type Database = {
       }
       knowledge_entries: {
         Row: {
-          answer: string
-          chatbot_id: string | null
-          created_at: string | null
-          embedding: string | null
-          id: string
-          keywords: string[] | null
-          metadata: Json | null
-          question: string
-          source_document_id: string | null
-          updated_at: string | null
-        }
+          id: string;
+          chatbot_id: string;
+          question: string;
+          answer: string;
+          category: string | null;
+          subcategory: string | null;
+          keywords: string[] | null;
+          source_document_id: string | null;
+          embedding: string | null;
+          metadata: Json | null;
+          created_at: string | null;
+          updated_at: string | null;
+          is_duplicate: boolean;
+          similarity_score: number | null;
+        };
         Insert: {
-          answer: string
-          chatbot_id?: string | null
-          created_at?: string | null
-          embedding?: string | null
-          id?: string
-          keywords?: string[] | null
-          metadata?: Json | null
-          question: string
-          source_document_id?: string | null
-          updated_at?: string | null
-        }
+          id?: string;
+          chatbot_id: string;
+          question: string;
+          answer: string;
+          category?: string | null;
+          subcategory?: string | null;
+          keywords?: string[] | null;
+          source_document_id?: string | null;
+          embedding?: string | null;
+          metadata?: Json | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+          is_duplicate?: boolean;
+          similarity_score?: number | null;
+        };
         Update: {
-          answer?: string
-          chatbot_id?: string | null
-          created_at?: string | null
-          embedding?: string | null
-          id?: string
-          keywords?: string[] | null
-          metadata?: Json | null
-          question?: string
-          source_document_id?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "knowledge_entries_chatbot_id_fkey"
-            columns: ["chatbot_id"]
-            isOneToOne: false
-            referencedRelation: "chatbots"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "knowledge_entries_source_document_id_fkey"
-            columns: ["source_document_id"]
-            isOneToOne: false
-            referencedRelation: "documents"
-            referencedColumns: ["id"]
-          },
-        ]
+          id?: string;
+          chatbot_id?: string;
+          question?: string;
+          answer?: string;
+          category?: string | null;
+          subcategory?: string | null;
+          keywords?: string[] | null;
+          source_document_id?: string | null;
+          embedding?: string | null;
+          metadata?: Json | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+          is_duplicate?: boolean;
+          similarity_score?: number | null;
+        };
       }
       messages: {
         Row: {
@@ -490,6 +486,28 @@ export type Database = {
         Args: { "": unknown[] }
         Returns: number
       }
+      bulk_import_knowledge_entries: {
+        Args: {
+          entries: Json;
+          chatbot_uuid: string;
+        };
+        Returns: {
+          id: string;
+          question: string;
+          answer: string;
+          category: string | null;
+          subcategory: string | null;
+          is_duplicate: boolean;
+        }[];
+      };
+      export_knowledge_entries: {
+        Args: {
+          chatbot_uuid: string;
+          category_filter?: string;
+          include_duplicates?: boolean;
+        };
+        Returns: Json;
+      };
     }
     Enums: {
       document_status: "processing" | "completed" | "failed"

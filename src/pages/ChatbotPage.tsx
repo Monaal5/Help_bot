@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Bot, MessageSquare, Loader2, Settings } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabaseChatbotService, generateChatbotResponse } from "@/services/supabaseChatbotService";
+import { useToast } from "@/hooks/use-toast";
+import ReactMarkdown from 'react-markdown';
+
+// Animated vertical three dots component
+const AnimatedDots = () => (
+  <div className="flex flex-col items-center justify-center h-6">
+    <span className="block w-2 h-2 bg-gray-400 rounded-full mb-1 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+    <span className="block w-2 h-2 bg-gray-400 rounded-full mb-1 animate-bounce" style={{ animationDelay: '200ms' }}></span>
+    <span className="block w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '400ms' }}></span>
+  </div>
+);
 
 const ChatbotPage = () => {
   const { chatbotId } = useParams();
@@ -13,6 +24,13 @@ const ChatbotPage = () => {
   const [currentMessage, setCurrentMessage] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+  const [typewriter, setTypewriter] = useState<{ index: number; words: string[]; current: string }>({
+    index: -1,
+    words: [],
+    current: ''
+  });
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   // Get chatbot details
   const { data: chatbot, isLoading: chatbotLoading } = useQuery({
@@ -38,44 +56,72 @@ const ChatbotPage = () => {
           })));
         } catch (error) {
           console.error('Failed to create session:', error);
+          toast({
+            variant: "destructive",
+            description: "Failed to initialize chat session. Please try again."
+          });
         }
       }
     };
 
     initSession();
-  }, [chatbotId, sessionId]);
+  }, [chatbotId, sessionId, toast]);
+
+  // Auto-scroll to bottom when messages or typewriter changes
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, typewriter]);
+
+  // Typewriter effect for assistant
+  useEffect(() => {
+    if (typewriter.index >= 0 && typewriter.words.length > 0) {
+      if (typewriter.index < typewriter.words.length) {
+        const timeout = setTimeout(() => {
+          setTypewriter(t => ({
+            ...t,
+            current: t.current + (t.index > 0 ? ' ' : '') + t.words[t.index],
+            index: t.index + 1
+          }));
+        }, 60);
+        return () => clearTimeout(timeout);
+      } else {
+        // When done, add the full message to messages
+        setMessages(prev => [...prev.slice(0, -1), {
+          ...prev[prev.length - 1],
+          content: typewriter.current
+        }]);
+        setTypewriter({ index: -1, words: [], current: '' });
+      }
+    }
+  }, [typewriter]);
 
   const sendMessage = async () => {
     if (!currentMessage.trim() || !sessionId || !chatbotId) return;
-
-    const userMessage = {
-      role: 'user',
-      content: currentMessage,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setCurrentMessage('');
     setIsLoading(true);
-
+    const userMessage = currentMessage;
+    setCurrentMessage('');
     try {
-      const response = await generateChatbotResponse(currentMessage, chatbotId, sessionId);
-      
-      const assistantMessage = {
-        role: 'assistant',
-        content: response.content,
+      setMessages(prev => [...prev, {
+        role: 'user',
+        content: userMessage,
         timestamp: new Date()
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error('Failed to get response:', error);
-      const errorMessage = {
+      }]);
+      // Generate response
+      const response = await generateChatbotResponse(userMessage, chatbotId, sessionId);
+      // Add a placeholder for assistant message
+      setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: '',
         timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      }]);
+      setTypewriter({ index: 0, words: response.content.split(' '), current: '' });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        description: error.message || "Failed to send message. Please try again."
+      });
     } finally {
       setIsLoading(false);
     }
@@ -83,47 +129,47 @@ const ChatbotPage = () => {
 
   if (chatbotLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
-          <p className="text-gray-600">Loading chatbot...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin" />
       </div>
     );
   }
 
   if (!chatbot) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
-        <div className="text-center">
-          <Bot className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Chatbot Not Found</h2>
-          <p className="text-gray-600">The chatbot you're looking for doesn't exist.</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6">
+            <h2 className="text-xl font-semibold mb-2">Chatbot Not Found</h2>
+            <p className="text-gray-600 mb-4">The requested chatbot could not be found.</p>
+            <Link to="/">
+              <Button>Return Home</Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
-      <div className="max-w-4xl mx-auto p-4">
-        <Card className="h-[90vh] flex flex-col">
-          <CardHeader className="border-b bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-t-lg">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="max-w-4xl mx-auto">
+        <Card className="h-[calc(100vh-2rem)] flex flex-col">
+          <CardHeader className="border-b">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                  <Bot className="w-5 h-5" />
-                </div>
+              <div className="flex items-center gap-2">
+                <Bot className="w-6 h-6 text-blue-600" />
                 <div>
-                  <CardTitle className="text-lg">{chatbot.name}</CardTitle>
-                  <CardDescription className="text-blue-100">
-                    {chatbot.description || 'AI Assistant'}
-                  </CardDescription>
+                  <CardTitle>{chatbot.name}</CardTitle>
+                  <CardDescription>{chatbot.description}</CardDescription>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" className="text-white hover:bg-white/20">
-                <Settings className="w-4 h-4" />
-              </Button>
+              <Link to={`/edit-chatbot?id=${chatbotId}`}>
+                <Button variant="outline" size="sm">
+                  <Settings className="w-4 h-4 mr-2" />
+                  Settings
+                </Button>
+              </Link>
             </div>
           </CardHeader>
 
@@ -131,8 +177,22 @@ const ChatbotPage = () => {
             <div className="space-y-4">
               {messages.map((msg, index) => (
                 <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`rounded-lg p-3 w-fit max-w-[80%] ${msg.role === 'user' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                    {msg.content}
+                  <div 
+                    className={`rounded-lg p-3 w-fit max-w-[80%] ${
+                      msg.role === 'user' 
+                        ? 'bg-blue-100 text-blue-800' 
+                        : 'bg-white text-gray-800 shadow-sm'
+                    }`}
+                  >
+                    {msg.role === 'assistant' ? (
+                      <div className="prose prose-sm max-w-none">
+                        <ReactMarkdown>
+                          {index === messages.length - 1 && typewriter.index >= 0 ? typewriter.current : msg.content}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      msg.content
+                    )}
                     <div className="text-xs text-gray-500 mt-1 text-right">
                       {msg.timestamp.toLocaleTimeString()}
                     </div>
@@ -141,11 +201,12 @@ const ChatbotPage = () => {
               ))}
               {isLoading && (
                 <div className="flex justify-start">
-                  <div className="rounded-lg p-3 w-fit max-w-[80%] bg-gray-100 text-gray-800">
-                    Thinking...
+                  <div className="rounded-lg p-3 w-fit max-w-[80%] bg-white text-gray-800 shadow-sm">
+                    <AnimatedDots />
                   </div>
                 </div>
               )}
+              <div ref={chatEndRef} />
             </div>
           </CardContent>
 
@@ -157,12 +218,14 @@ const ChatbotPage = () => {
                 value={currentMessage}
                 onChange={(e) => setCurrentMessage(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
                     sendMessage();
                   }
                 }}
+                disabled={isLoading}
               />
-              <Button onClick={sendMessage} disabled={isLoading}>
+              <Button onClick={sendMessage} disabled={isLoading || !currentMessage.trim()}>
                 {isLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
                 ) : (

@@ -1,9 +1,9 @@
-
-const OPENROUTER_API_KEY = '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';
+const OPENROUTER_API_KEY = 'ssk-or-v1-97be50eed83735c96f335a82dc4c75f736830d6628f0a7e61dca937b6988d9de';
 
 export interface OpenAIResponse {
   content: string;
   isFromAI: boolean;
+  confidence?: number;
 }
 
 export const generateAIResponse = async (
@@ -45,7 +45,8 @@ export const generateAIResponse = async (
     
     return {
       content: data.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response at the moment.",
-      isFromAI: true
+      isFromAI: true,
+      confidence: data.choices[0]?.message?.confidence
     };
   } catch (error) {
     console.error('OpenRouter API Error:', error);
