@@ -4,14 +4,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useUser, UserButton } from "@clerk/clerk-react";
 import { useQuery } from "@tanstack/react-query";
-import { getChatbots } from "@/services/supabaseChatbotService";
+import { supabaseChatbotService } from "@/services/supabaseChatbotService";
 
 const Index = () => {
   const { user } = useUser();
   
   const { data: chatbots, isLoading } = useQuery({
     queryKey: ['chatbots', user?.id],
-    queryFn: () => getChatbots(user?.id || ''),
+    queryFn: () => supabaseChatbotService.getChatbotsByUser(user?.id || ''),
     enabled: !!user?.id,
   });
 

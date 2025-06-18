@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Bot, MessageSquare, Loader2, Settings } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getChatbot, createChatSession, generateChatbotResponse, getSessionMessages } from "@/services/supabaseChatbotService";
+import { supabaseChatbotService, generateChatbotResponse } from "@/services/supabaseChatbotService";
 
 const ChatbotPage = () => {
   const { chatbotId } = useParams();
@@ -17,7 +17,7 @@ const ChatbotPage = () => {
   // Get chatbot details
   const { data: chatbot, isLoading: chatbotLoading } = useQuery({
     queryKey: ['chatbot', chatbotId],
-    queryFn: () => getChatbot(chatbotId!),
+    queryFn: () => supabaseChatbotService.getChatbotById(chatbotId!),
     enabled: !!chatbotId,
   });
 
@@ -26,11 +26,11 @@ const ChatbotPage = () => {
     const initSession = async () => {
       if (chatbotId && !sessionId) {
         try {
-          const session = await createChatSession(chatbotId);
+          const session = await supabaseChatbotService.createChatSession(chatbotId);
           setSessionId(session.id);
           
           // Load existing messages if any
-          const existingMessages = await getSessionMessages(session.id);
+          const existingMessages = await supabaseChatbotService.getMessagesBySession(session.id);
           setMessages(existingMessages.map(msg => ({
             role: msg.role,
             content: msg.content,

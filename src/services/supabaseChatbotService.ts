@@ -23,7 +23,7 @@ export class SupabaseChatbotService {
       .single();
 
     if (error) throw error;
-    return chatbot as Chatbot; // Type assertion to handle Json type conversion
+    return chatbot as Chatbot;
   }
 
   async getChatbotsByUser(clerkUserId: string): Promise<Chatbot[]> {
@@ -34,7 +34,7 @@ export class SupabaseChatbotService {
       .eq('is_active', true);
 
     if (error) throw error;
-    return (chatbots || []) as Chatbot[]; // Type assertion
+    return (chatbots || []) as Chatbot[];
   }
 
   async getChatbotById(id: string): Promise<Chatbot | null> {
@@ -45,7 +45,7 @@ export class SupabaseChatbotService {
       .single();
 
     if (error) throw error;
-    return chatbot as Chatbot; // Type assertion
+    return chatbot as Chatbot;
   }
 
   async updateChatbot(id: string, updates: Partial<Chatbot>): Promise<Chatbot> {
@@ -57,7 +57,7 @@ export class SupabaseChatbotService {
       .single();
 
     if (error) throw error;
-    return chatbot as Chatbot; // Type assertion
+    return chatbot as Chatbot;
   }
 
   async createChatSession(chatbotId: string, userData?: { name?: string; email?: string }): Promise<ChatSession> {
@@ -73,7 +73,7 @@ export class SupabaseChatbotService {
       .single();
 
     if (error) throw error;
-    return session as ChatSession; // Type assertion
+    return session as ChatSession;
   }
 
   async addMessage(sessionId: string, message: {
@@ -95,7 +95,7 @@ export class SupabaseChatbotService {
       .single();
 
     if (error) throw error;
-    return newMessage as Message; // Type assertion
+    return newMessage as Message;
   }
 
   async getMessagesBySession(sessionId: string): Promise<Message[]> {
@@ -106,11 +106,10 @@ export class SupabaseChatbotService {
       .order('created_at', { ascending: true });
 
     if (error) throw error;
-    return (messages || []) as Message[]; // Type assertion
+    return (messages || []) as Message[];
   }
 
   async searchKnowledgeBase(chatbotId: string, query: string): Promise<KnowledgeEntry[]> {
-    // Simple text search for now - in production you'd use vector similarity
     const { data: entries, error } = await supabase
       .from('knowledge_entries')
       .select('*')
@@ -118,7 +117,7 @@ export class SupabaseChatbotService {
       .ilike('question', `%${query}%`);
 
     if (error) throw error;
-    return (entries || []) as KnowledgeEntry[]; // Type assertion
+    return (entries || []) as KnowledgeEntry[];
   }
 
   async addKnowledgeEntry(data: {
@@ -143,7 +142,7 @@ export class SupabaseChatbotService {
       .single();
 
     if (error) throw error;
-    return entry as KnowledgeEntry; // Type assertion
+    return entry as KnowledgeEntry;
   }
 
   async createDocument(data: {
@@ -173,7 +172,7 @@ export class SupabaseChatbotService {
       .single();
 
     if (error) throw error;
-    return document as Document; // Type assertion
+    return document as Document;
   }
 
   async updateDocumentStatus(documentId: string, status: 'processing' | 'completed' | 'failed'): Promise<void> {
@@ -193,7 +192,7 @@ export class SupabaseChatbotService {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return (documents || []) as Document[]; // Type assertion
+    return (documents || []) as Document[];
   }
 
   async getChatSessionsByChatbot(chatbotId: string): Promise<ChatSession[]> {
@@ -204,7 +203,7 @@ export class SupabaseChatbotService {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return (sessions || []) as ChatSession[]; // Type assertion
+    return (sessions || []) as ChatSession[];
   }
 
   async logAnalytics(data: {
@@ -227,3 +226,35 @@ export class SupabaseChatbotService {
 }
 
 export const supabaseChatbotService = new SupabaseChatbotService();
+
+// Export individual functions for easier importing
+export const getChatbots = (clerkUserId: string) => supabaseChatbotService.getChatbotsByUser(clerkUserId);
+export const getChatbot = (id: string) => supabaseChatbotService.getChatbotById(id);
+export const createChatSession = (chatbotId: string, userData?: { name?: string; email?: string }) => 
+  supabaseChatbotService.createChatSession(chatbotId, userData);
+export const getSessionMessages = (sessionId: string) => supabaseChatbotService.getMessagesBySession(sessionId);
+
+// Mock function for generateChatbotResponse - this would integrate with OpenRouter in production
+export const generateChatbotResponse = async (message: string, chatbotId: string, sessionId: string) => {
+  // Log the user message
+  await supabaseChatbotService.addMessage(sessionId, {
+    role: 'user',
+    content: message
+  });
+
+  // For now, return a simple response - this would be replaced with OpenRouter integration
+  const response = {
+    content: "I'm a chatbot assistant. This is a placeholder response. OpenRouter integration would be implemented here.",
+    source: 'generative' as const,
+    isFromAI: true
+  };
+
+  // Log the assistant response
+  await supabaseChatbotService.addMessage(sessionId, {
+    role: 'assistant',
+    content: response.content,
+    response_source: 'generative'
+  });
+
+  return response;
+};
