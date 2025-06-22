@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
+import react from "@vitejs/plugin-react";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
@@ -20,14 +20,16 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "react": path.resolve(__dirname, "node_modules/react"),
+      "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
     },
   },
   optimizeDeps: {
-    include: ['pdfjs-dist/build/pdf'],
+    include: ['react', 'react-dom', 'pdfjs-dist/build/pdf'],
   },
   build: {
     commonjsOptions: {
-      include: [/pdfjs-dist/],
+      include: [/pdfjs-dist/, /node_modules/],
     },
   },
 }));
