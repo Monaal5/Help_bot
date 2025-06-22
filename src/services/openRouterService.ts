@@ -13,7 +13,7 @@ interface OpenRouterResponse {
 }
 
 // Default OpenRouter API key for all chatbots
-const DEFAULT_OPENROUTER_KEY = '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';
+const DEFAULT_OPENROUTER_KEY = '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';
 
 const getOpenRouterKey = (): string => {
   return DEFAULT_OPENROUTER_KEY;
@@ -70,16 +70,31 @@ export const generateOpenRouterResponse = async (
     });
 
     if (!response.ok) {
-      throw new Error(`OpenRouter API error: ${response.status}`);
+      let errorText = '';
+      try {
+        errorText = await response.text();
+        console.error('OpenRouter API error response:', errorText);
+      } catch (e) {
+        console.error('OpenRouter API error: Could not read error body', e);
+      }
+      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
     }
 
-    const data: OpenRouterResponse = await response.json();
-    const content = data.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
+    const data = await response.json();
+    if ('error' in data) {
+      console.error('OpenRouter API error:', data.error);
+      return `Sorry, the AI service returned an error: ${data.error.message || 'Unknown error.'}`;
+    }
+    if (!data || !Array.isArray(data.choices) || data.choices.length === 0 || !data.choices[0]?.message?.content) {
+      console.error('Malformed OpenRouter API response:', data);
+      return 'Sorry, I could not generate a response due to an unexpected server reply.';
+    }
+    const content = data.choices[0].message.content;
     
     // Format the response to ensure proper markdown rendering
     return content.replace(/\n/g, '\n\n');
-  } catch (error) {
-    console.error('OpenRouter API error:', error);
-    throw error;
+  } catch (error: any) {
+    console.error('OpenRouter API error:', error?.message || error);
+    return `Sorry, the AI service returned an error: ${error?.message || 'Unknown error.'}`;
   }
 };

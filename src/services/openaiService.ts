@@ -1,4 +1,4 @@
-const OPENROUTER_API_KEY = 'ssk-or-v1-97be50eed83735c96f335a82dc4c75f736830d6628f0a7e61dca937b6988d9de';
+const OPENROUTER_API_KEY = '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';
 
 export interface OpenAIResponse {
   content: string;

@@ -525,6 +525,26 @@ export class SupabaseChatbotService {
     if (error) throw error;
     return data || [];
   }
+
+  async getChatSessionsByUserEmail(userEmail: string): Promise<ChatSession[]> {
+    if (!userEmail) return [];
+    const { data: sessions, error } = await supabase
+      .from('chat_sessions')
+      .select('*')
+      .eq('user_email', userEmail)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (sessions || []) as ChatSession[];
+  }
+
+  async getAllChatbots(): Promise<Chatbot[]> {
+    const { data: chatbots, error } = await supabase
+      .from('chatbots')
+      .select('*');
+    if (error) throw error;
+    return (chatbots || []) as Chatbot[];
+  }
 }
 
 // Create a singleton instance
@@ -536,6 +556,9 @@ export const getChatbot = (id: string) => supabaseChatbotService.getChatbotById(
 export const createChatSession = (chatbotId: string, userData?: { name?: string; email?: string }) => 
   supabaseChatbotService.createChatSession(chatbotId, userData);
 export const getSessionMessages = (sessionId: string) => supabaseChatbotService.getMessagesBySession(sessionId);
+export const getChatSessionsByUserEmail = (userEmail: string) =>
+  supabaseChatbotService.getChatSessionsByUserEmail(userEmail);
+export const getAllChatbots = () => supabaseChatbotService.getAllChatbots();
 
 // Updated generateChatbotResponse function with enhanced intelligence
 export const generateChatbotResponse = async (message: string, chatbotId: string, sessionId: string) => {

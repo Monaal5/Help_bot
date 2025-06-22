@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ClerkProvider } from "@clerk/clerk-react";
 import { ErrorBoundary} from "@/components/ErrorBoundary";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import Landing from "./pages/Landing";
 
 // Lazy load pages for better performance
 const Index = lazy(() => import("./pages/Index"));
@@ -49,7 +50,8 @@ const App = () => (
             <Suspense fallback={<LoadingSpinner />}>
               <Routes>
                 <Route path="/auth" element={<Auth />} />
-                <Route path="/" element={<AuthGuard><Index /></AuthGuard>} />
+                <Route path="/" element={<AuthGuard><Landing /></AuthGuard>} />
+                <Route path="/dashboard" element={<AuthGuard><Index /></AuthGuard>} />
                 <Route path="/create-chatbot" element={<AuthGuard><CreateChatbot /></AuthGuard>} />
                 <Route path="/view-sessions" element={<AuthGuard><ViewSessions /></AuthGuard>} />
                 <Route path="/edit-chatbot" element={<AuthGuard><EditChatbot /></AuthGuard>} />

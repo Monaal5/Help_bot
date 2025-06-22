@@ -97,8 +97,8 @@ export default function CreateChatbot() {
         description: "Chatbot created successfully!"
       });
       
-      // Navigate to home page instead of edit page
-      navigate('/');
+      // Navigate to dashboard page instead of home page
+      navigate('/dashboard');
     } catch (error) {
       console.error('Error creating chatbot:', error);
       toast({

@@ -357,7 +357,7 @@ const EditChatbot = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/dashboard")}
               className="fzlex items-center"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />

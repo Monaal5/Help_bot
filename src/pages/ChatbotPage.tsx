@@ -32,6 +32,11 @@ const ChatbotPage = () => {
   });
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Modal state for user info
+  const [showUserModal, setShowUserModal] = useState(true);
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+
   // Get chatbot details
   const { data: chatbot, isLoading: chatbotLoading } = useQuery({
     queryKey: ['chatbot', chatbotId],
@@ -39,14 +44,16 @@ const ChatbotPage = () => {
     enabled: !!chatbotId,
   });
 
-  // Create session on mount
+  // Create session on mount (after user info is provided)
   useEffect(() => {
     const initSession = async () => {
-      if (chatbotId && !sessionId) {
+      if (chatbotId && !sessionId && userName && userEmail) {
         try {
-          const session = await supabaseChatbotService.createChatSession(chatbotId);
+          const session = await supabaseChatbotService.createChatSession(chatbotId, {
+            name: userName,
+            email: userEmail,
+          });
           setSessionId(session.id);
-          
           // Load existing messages if any
           const existingMessages = await supabaseChatbotService.getMessagesBySession(session.id);
           setMessages(existingMessages.map(msg => ({
@@ -63,9 +70,10 @@ const ChatbotPage = () => {
         }
       }
     };
-
-    initSession();
-  }, [chatbotId, sessionId, toast]);
+    if (!showUserModal) {
+      initSession();
+    }
+  }, [chatbotId, sessionId, toast, userName, userEmail, showUserModal]);
 
   // Auto-scroll to bottom when messages or typewriter changes
   useEffect(() => {
@@ -77,14 +85,15 @@ const ChatbotPage = () => {
   // Typewriter effect for assistant
   useEffect(() => {
     if (typewriter.index >= 0 && typewriter.words.length > 0) {
-      if (typewriter.index < typewriter.words.length) {
+      const fullText = typewriter.words.join(' ');
+      if (typewriter.index < fullText.length) {
         const timeout = setTimeout(() => {
           setTypewriter(t => ({
             ...t,
-            current: t.current + (t.index > 0 ? ' ' : '') + t.words[t.index],
+            current: fullText.slice(0, t.index + 1),
             index: t.index + 1
           }));
-        }, 60);
+        }, 18); // 18ms per character for a smooth effect
         return () => clearTimeout(timeout);
       } else {
         // When done, add the full message to messages
@@ -135,6 +144,52 @@ const ChatbotPage = () => {
     );
   }
 
+  // User info modal
+  if (showUserModal) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <Card className="w-full max-w-sm p-6">
+          <CardHeader>
+            <CardTitle>Enter your details</CardTitle>
+            <CardDescription>To start chatting, please provide your name and email.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                if (userName.trim() && userEmail.trim()) {
+                  setShowUserModal(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block mb-1 font-medium">Name</label>
+                <Input
+                  type="text"
+                  value={userName}
+                  onChange={e => setUserName(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Email</label>
+                <Input
+                  type="email"
+                  value={userEmail}
+                  onChange={e => setUserEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full mt-2">Start Chatting</Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!chatbot) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -142,7 +197,7 @@ const ChatbotPage = () => {
           <CardContent className="p-6">
             <h2 className="text-xl font-semibold mb-2">Chatbot Not Found</h2>
             <p className="text-gray-600 mb-4">The requested chatbot could not be found.</p>
-            <Link to="/">
+            <Link to="/dashboard">
               <Button>Return Home</Button>
             </Link>
           </CardContent>
