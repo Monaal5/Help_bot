@@ -13,7 +13,7 @@ interface OpenRouterResponse {
 }
 
 // Default OpenRouter API key for all chatbots
-const DEFAULT_OPENROUTER_KEY = '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';
+const DEFAULT_OPENROUTER_KEY = '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';
 
 const getOpenRouterKey = (): string => {
   return DEFAULT_OPENROUTER_KEY;
