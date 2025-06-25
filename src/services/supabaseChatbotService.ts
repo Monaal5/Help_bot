@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { Chatbot, ChatSession, Message, KnowledgeEntry, Document } from "@/types/database";
-import { generateOpenRouterResponse } from "./openRouterService";
+import { generateDeepSeekResponse } from "./deepseekService";
 import { DocumentProcessor, ProcessedDocument } from './documentProcessor';
 import { knowledgeBase } from './knowledgeBase';
 
@@ -613,7 +613,7 @@ export const generateChatbotResponse = async (message: string, chatbotId: string
       ];
 
       // Generate a natural response using the knowledge base data
-      const response = await generateOpenRouterResponse(messages);
+      const response = await generateDeepSeekResponse(messages);
 
       await supabaseChatbotService.addMessage(sessionId, {
         role: 'assistant',
@@ -652,21 +652,24 @@ If the information is not directly related to the question, use it to provide re
 If the user is greeting you, respond warmly and introduce yourself.
 If they're asking a question, answer naturally while incorporating any relevant information.`;
 
-    // Build messages array for OpenRouter
+    // Build messages array for DeepSeek
     const messages = [
       {
         role: 'system' as const,
-        content: systemPrompt
+        content: systemPrompt || 'You are a helpful AI assistant.'
       },
-      // Add recent conversation history (last 10 messages)
-      ...previousMessages.slice(-10).map(msg => ({
-        role: msg.role as 'user' | 'assistant',
+      ...previousMessages.map(msg => ({
+        role: msg.role as 'user' | 'assistant' | 'system',
         content: msg.content
-      }))
+      })),
+      {
+        role: 'user' as const,
+        content: message
+      }
     ];
 
-    // Generate response using OpenRouter with enhanced context
-    const response = await generateOpenRouterResponse(messages);
+    // Generate response using DeepSeek with enhanced context
+    const response = await generateDeepSeekResponse(messages);
 
     // Log the assistant response
     await supabaseChatbotService.addMessage(sessionId, {
