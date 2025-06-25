@@ -199,7 +199,7 @@ class KnowledgeBase {
     ))];
   }
 
-  searchRelevantResponse(query: string): string | null {
+  searchRelevantResponse(query: string): KnowledgeEntry | null {
     const queryKeywords = this.extractKeywords(query);
     
     if (queryKeywords.length === 0) return null;
@@ -231,7 +231,7 @@ class KnowledgeBase {
       }
     }
 
-    return bestMatch?.answer ?? null;
+    return bestMatch;
   }
 
   private calculateSimilarity(str1: string, str2: string): number {

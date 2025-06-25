@@ -219,12 +219,6 @@ const ChatbotPage = () => {
                   <CardDescription>{chatbot.description}</CardDescription>
                 </div>
               </div>
-              <Link to={`/edit-chatbot?id=${chatbotId}`}>
-                <Button variant="outline" size="sm">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
-                </Button>
-              </Link>
             </div>
           </CardHeader>
 
@@ -241,7 +235,18 @@ const ChatbotPage = () => {
                   >
                     {msg.role === 'assistant' ? (
                       <div className="prose prose-sm max-w-none">
-                        <ReactMarkdown>
+                        <ReactMarkdown
+                          components={{
+                            a: ({node, ...props}) => (
+                              <a
+                                {...props}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 underline hover:text-blue-800 transition-colors duration-150 cursor-pointer"
+                              />
+                            )
+                          }}
+                        >
                           {index === messages.length - 1 && typewriter.index >= 0 ? typewriter.current : msg.content}
                         </ReactMarkdown>
                       </div>

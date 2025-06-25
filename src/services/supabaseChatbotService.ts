@@ -1,8 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { Chatbot, ChatSession, Message, KnowledgeEntry, Document } from "@/types/database";
-import { generateDeepSeekResponse } from "./deepseekService";
 import { DocumentProcessor, ProcessedDocument } from './documentProcessor';
 import { knowledgeBase } from './knowledgeBase';
+import { generateAIResponse } from './openaiService';
 
 // Custom error class for Supabase service errors
 export class SupabaseServiceError extends Error {
@@ -571,123 +571,51 @@ export const generateChatbotResponse = async (message: string, chatbotId: string
       throw new Error('Chatbot not found');
     }
 
-    // Initialize knowledge base for this chatbot
-    await knowledgeBase.initialize(chatbotId);
-    console.log('Knowledge base initialized');
-
     // Log the user message first
     await supabaseChatbotService.addMessage(sessionId, {
       role: 'user',
       content: message
     });
 
-    // First, try to find a response in the knowledge base
-    const knowledgeResponse = knowledgeBase.searchRelevantResponse(message);
-    console.log('Knowledge base search result:', knowledgeResponse ? 'Found match' : 'No match found');
-    
-    if (knowledgeResponse) {
-      console.log('Using knowledge base response');
-      // Get previous messages for context
-      const previousMessages = await supabaseChatbotService.getMessagesBySession(sessionId);
-      
-      // Build a more natural response using the knowledge base data
-      const systemPrompt = `You are ${chatbot.name}, an AI assistant. Use the following information to create a natural, conversational response. Make it sound like a real conversation, not just reciting information. If the user is greeting you, respond warmly. If they're asking a question, answer naturally while incorporating the provided information.`;
-
-      const messages = [
-        {
-          role: 'system' as const,
-          content: systemPrompt
-        },
-        ...previousMessages.slice(-5).map(msg => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content
-        })),
-        {
-          role: 'system' as const,
-          content: `Here is the relevant information to use in your response: ${knowledgeResponse}`
-        },
-        {
-          role: 'user' as const,
-          content: message
-        }
-      ];
-
-      // Generate a natural response using the knowledge base data
-      const response = await generateDeepSeekResponse(messages);
-
+    // Use only the system_prompt for the response
+    if (!chatbot.system_prompt || chatbot.system_prompt.trim().length === 0) {
+      const fallback = "I'm sorry, I don't have enough information to answer that right now.";
       await supabaseChatbotService.addMessage(sessionId, {
         role: 'assistant',
-        content: response,
-        response_source: 'knowledge_base'
+        content: fallback,
+        response_source: 'generative'
       });
-
       return {
-        content: response,
-        source: 'knowledge-base',
+        content: fallback,
+        source: 'system-prompt',
         isFromAI: true
       };
     }
 
-    // If no knowledge base match, search documents and use AI
-    console.log('No knowledge base match, searching documents and using AI');
-    const documents = await supabaseChatbotService.getDocumentsByChatbot(chatbotId);
-    const previousMessages = await supabaseChatbotService.getMessagesBySession(sessionId);
-
-    // Build enhanced system prompt with all available knowledge
-    let systemPrompt = chatbot.system_prompt || `You are ${chatbot.name}, an AI assistant.`;
-    
-    // Add document context
-    if (documents.length > 0) {
-      systemPrompt += '\n\nHere is additional information from our documents:\n';
-      documents.forEach(doc => {
-        systemPrompt += `\n${doc.content}\n`;
-      });
-    }
-
-    // Add instructions for using the knowledge
-    systemPrompt += `
-Use this information to provide intelligent, contextual responses.
-Make your responses natural and conversational while ensuring accuracy.
-If the information is not directly related to the question, use it to provide relevant context or examples.
-If the user is greeting you, respond warmly and introduce yourself.
-If they're asking a question, answer naturally while incorporating any relevant information.`;
-
-    // Build messages array for DeepSeek
-    const messages = [
-      {
-        role: 'system' as const,
-        content: systemPrompt || 'You are a helpful AI assistant.'
-      },
-      ...previousMessages.map(msg => ({
-        role: msg.role as 'user' | 'assistant' | 'system',
-        content: msg.content
-      })),
-      {
-        role: 'user' as const,
-        content: message
-      }
+    // Build the system prompt for the AI
+    const systemPrompt = chatbot.system_prompt;
+    const aiMessages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: message }
     ];
+    const aiResponse = await generateAIResponse(aiMessages);
 
-    // Generate response using DeepSeek with enhanced context
-    const response = await generateDeepSeekResponse(messages);
-
-    // Log the assistant response
     await supabaseChatbotService.addMessage(sessionId, {
       role: 'assistant',
-      content: response,
+      content: aiResponse.content,
       response_source: 'generative'
     });
 
     return {
-      content: response,
-      source: 'generative',
+      content: aiResponse.content,
+      source: 'system-prompt',
       isFromAI: true
     };
   } catch (error) {
     console.error('Error generating response:', error);
     return {
       content: "I'm here to help! What would you like to know more about?",
-      source: 'generative',
+      source: 'system-prompt',
       isFromAI: true
     };
   }

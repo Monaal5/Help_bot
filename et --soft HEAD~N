@@ -1,0 +1,30 @@
+[33m7595e70[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Cleaned secrets and restored safe code
+[33m83300c7[m changes
+[33m761f949[m changes
+[33md659fce[m new updations
+[33m7b7d8f1[m[33m ([m[1;31morigin/main[m[33m)[m updated
+[33m11b0f09[m updated
+[33m7a0c955[m updated
+[33m3328724[m new version
+[33m038b726[m initial commit
+[33med90f19[m vercel.json_added
+[33m864ca67[m updated again
+[33m5724209[m updated
+[33mbe43b26[m updated
+[33m0c512d5[m updated version
+[33m1f89808[m Fix: Chatbot response and edit session issues
+[33md6c3a7c[m Apply RLS policies to Supabase
+[33m5641026[m Fix: Create chatbot functionality
+[33m74149ff[m Fix: Resolve 'getChatbots' export error
+[33m5313b65[m Fix: Remove duplicate ClerkProvider
+[33m8a59323[m Apply database schema changes
+[33m43ad799[m Connect to Supabase project
+[33mcd3ca52[m Replace OpenAI with OpenRouter
+[33m02f4f6a[m Implement chatbot data-aware responses
+[33m6dce088[m feat: Implement chatbot functionality
+[33m87c8c58[m feat: Implement edit chatbot functionality
+[33me8a0ca1[m Fix: Implement view sessions button
+[33m2feefd6[m feat: Implement chatbot creation functionality
+[33m4384b67[m Add Clerk authentication
+[33m027cd2b[m feat: Implement landing page
+[33m1dd81d1[m Use tech stack vite_react_shadcn_ts

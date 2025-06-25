@@ -3,11 +3,11 @@ import { generateAIResponse, OpenAIResponse } from './openaiService';
 import { supabaseChatbotService } from './supabaseChatbotService';
 
 // Types
-export type MessageRole = 'user' | 'assistant' | 'system';
+export type MessageRole = 'system' | 'user' | 'assistant';
 export type ResponseSource = 'knowledge-base' | 'ai' | 'fallback';
 
 export interface Message {
-  role: MessageRole;
+  role: 'system' | 'user' | 'assistant';
   content: string;
   timestamp?: Date;
 }
@@ -71,66 +71,83 @@ export const generateChatbotResponse = async (
   conversationHistory: Message[] = []
 ): Promise<ChatbotResponse> => {
   try {
-    // Input validation
     validateMessage(message);
-    // We'll fetch chatbotName from the chatbot object below, so no need to validate it here
-
     console.log(`Processing message: "${message}" for chatbotId: ${chatbotId}`);
-    
-    // First, try to find a response in the knowledge base
-    try {
-      const knowledgeResponse = knowledgeBase.searchRelevantResponse(message);
-      
-      if (knowledgeResponse) {
-        console.log('Found response in knowledge base');
-        return {
-          content: knowledgeResponse,
-          source: 'knowledge-base',
-          isFromAI: false,
-          confidence: 0.8 // Example confidence score
-        };
-      }
-    } catch (error) {
-      console.error('Error searching knowledge base:', error);
-      throw new ChatbotServiceError(
-        'Failed to search knowledge base',
-        ERROR_CODES.KNOWLEDGE_BASE_ERROR,
-        error
-      );
-    }
 
-    // If no knowledge base match, use OpenAI
-    console.log('No knowledge base match, using OpenAI');
-    try {
-      const chatbot = await supabaseChatbotService.getChatbotById(chatbotId);
-      if (!chatbot) throw new Error('Chatbot not found');
-      const systemPrompt = chatbot.system_prompt || `You are ${chatbot.name}, a helpful AI assistant. ...`;
+    // Fetch chatbot details (for system_prompt and name)
+    const chatbot = await supabaseChatbotService.getChatbotById(chatbotId);
+    if (!chatbot) throw new ChatbotServiceError('Chatbot not found', ERROR_CODES.INVALID_INPUT);
+    const systemPrompt = chatbot.system_prompt || `You are ${chatbot.name}, a helpful AI assistant. Use the provided knowledge base entry to answer as intelligently, creatively, and conversationally as possible.`;
 
-      const aiResponse = await generateAIResponse(
-        message,
-        systemPrompt,
-        conversationHistory
-          .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-          .map(msg => ({
-            role: msg.role as 'user' | 'assistant',
-            content: msg.content
-          }))
-      );
-      
-      return {
-        content: aiResponse.content,
-        source: 'ai',
-        isFromAI: aiResponse.isFromAI,
-        confidence: aiResponse.confidence
+    // Get all KB entries for this chatbot
+    const allKnowledgeEntries = await supabaseChatbotService.getKnowledgeEntries(chatbotId);
+    // Find the top relevant KB entry
+    function getTopRelevantEntries(query: string, entries: any[], topN: number = 1) {
+      const extractKeywords = (text: string): string[] => {
+        const words = text.toLowerCase().split(/\s+/);
+        const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'about']);
+        return [...new Set(words.filter((word: string) => word.length > 3 && !stopWords.has(word)))];
       };
-    } catch (error) {
-      console.error('Error generating AI response:', error);
-      throw new ChatbotServiceError(
-        'Failed to generate AI response',
-        ERROR_CODES.AI_SERVICE_ERROR,
-        error
-      );
+      const calculateSimilarity = (str1: string, str2: string): number => {
+        const words1 = str1.toLowerCase().split(/\s+/);
+        const words2 = str2.toLowerCase().split(/\s+/);
+        const set1 = new Set(words1);
+        const set2 = new Set(words2);
+        const intersection = new Set([...set1].filter((x: string) => set2.has(x)));
+        const union = new Set([...set1, ...set2]);
+        return intersection.size / union.size;
+      };
+      const queryKeywords = extractKeywords(query);
+      return entries
+        .map((entry: any) => {
+          if (!entry.keywords) return { entry, score: 0 };
+          const commonKeywords = entry.keywords.filter((keyword: string) => queryKeywords.some((qk: string) => qk.includes(keyword) || keyword.includes(qk)));
+          const keywordScore = commonKeywords.length / Math.max(entry.keywords.length, queryKeywords.length);
+          const questionSimilarity = calculateSimilarity(query, entry.question);
+          const answerSimilarity = calculateSimilarity(query, entry.answer);
+          const textScore = Math.max(questionSimilarity, answerSimilarity);
+          const finalScore = (keywordScore * 0.4) + (textScore * 0.6);
+          return { entry, score: finalScore };
+        })
+        .filter(({ score }: { entry: any; score: number }) => score > 0.15)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, topN)
+        .map(({ entry }) => entry);
     }
+    const topRelevantEntries = getTopRelevantEntries(message, allKnowledgeEntries, 1);
+    const kbEntry = topRelevantEntries[0];
+
+    // Build OpenAI messages array
+    const allowedRoles = ['system', 'user', 'assistant'] as const;
+    function isAllowedRole(role: string): role is 'system' | 'user' | 'assistant' {
+      return allowedRoles.includes(role as any);
+    }
+    const safeHistory = conversationHistory.slice(-5)
+      .filter(msg => isAllowedRole(msg.role))
+      .map(msg => ({
+        role: msg.role as 'system' | 'user' | 'assistant',
+        content: msg.content
+      }));
+    const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+      { role: 'system', content: systemPrompt },
+      ...(kbEntry
+        ? [{
+            role: 'system' as const,
+            content: `Here is the most relevant knowledge base entry for this conversation:\nQ: ${kbEntry.question}\nA: ${kbEntry.answer}`
+          }]
+        : []),
+      ...safeHistory,
+      { role: 'user', content: message }
+    ];
+
+    // Call OpenAI with the full messages array
+    const aiResponse = await generateAIResponse(messages);
+    return {
+      content: aiResponse.content,
+      source: 'ai',
+      isFromAI: aiResponse.isFromAI,
+      confidence: aiResponse.confidence
+    };
   } catch (error) {
     if (error instanceof ChatbotServiceError) {
       throw error;

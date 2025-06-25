@@ -1,4 +1,8 @@
-const DEEPSEEK_API_KEY = 'sk-15c1f889c5114f169c58136ac374abb4';
+// Load OpenAI API key from environment variable
+const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+if (!OPENAI_API_KEY) {
+  throw new Error('Missing OpenAI API key! Please set VITE_OPENAI_API_KEY in your .env file.');
+}
 
 export interface OpenAIResponse {
   content: string;
@@ -6,51 +10,60 @@ export interface OpenAIResponse {
   confidence?: number;
 }
 
+// Accepts a full OpenAI messages array
 export const generateAIResponse = async (
-  message: string, 
-  chatbotName: string,
-  conversationHistory: Array<{role: 'user' | 'assistant', content: string}> = []
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
 ): Promise<OpenAIResponse> => {
   try {
-    const systemPrompt = `You are ${chatbotName}, a helpful AI assistant. Provide concise, helpful responses. Keep your answers under 150 words and maintain a friendly, professional tone.`;
-    
-    const messages = [
-      { role: 'system' as const, content: systemPrompt },
-      ...conversationHistory.slice(-6), // Keep last 6 messages for context
-      { role: 'user' as const, content: message }
-    ];
-
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'gpt-3.5-turbo',
         messages,
         max_tokens: 200,
-        temperature: 0.7,
+        temperature: 0.9,
         top_p: 0.9,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`DeepSeek API error: ${response.status}`);
+      throw new Error(`OpenAI API error: ${response.status}`);
     }
 
     const data = await response.json();
-    
     return {
       content: data.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response at the moment.",
       isFromAI: true,
-      confidence: data.choices[0]?.message?.confidence
+      confidence: undefined // OpenAI does not return confidence
     };
   } catch (error) {
-    console.error('DeepSeek API Error:', error);
+    console.error('OpenAI API Error:', error);
     return {
       content: "I'm having trouble connecting to my AI service right now. Please try again later.",
       isFromAI: false
     };
   }
+};
+
+// Fallback response function
+const getFallbackResponse = (message: string, chatbotName: string): string => {
+  const userMessage = message.toLowerCase();
+  
+  if (userMessage.includes('hello') || userMessage.includes('hi')) {
+    return `Hello! I'm ${chatbotName}. I'm currently running in demo mode due to API limitations, but I'm here to help!`;
+  }
+  
+  if (userMessage.includes('help')) {
+    return `I'm ${chatbotName}, and I'm here to help! Currently in demo mode, but I can still assist with basic questions.`;
+  }
+  
+  if (userMessage.includes('thank')) {
+    return "You're welcome! I'm glad I could help, even in demo mode.";
+  }
+  
+  return `Hi! I'm ${chatbotName}. I'm currently running in demo mode due to API balance limitations. For full AI capabilities, please add funds to your DeepSeek API account at https://platform.deepseek.com/`;
 };
