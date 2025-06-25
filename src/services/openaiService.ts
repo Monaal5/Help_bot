@@ -14,37 +14,65 @@ export interface OpenAIResponse {
 export const generateAIResponse = async (
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
 ): Promise<OpenAIResponse> => {
+  // Validate messages array
+  if (
+    !Array.isArray(messages) ||
+    messages.length === 0 ||
+    !messages.every(
+      (msg) =>
+        msg &&
+        typeof msg.role === 'string' &&
+        ['system', 'user', 'assistant'].includes(msg.role) &&
+        typeof msg.content === 'string'
+    )
+  ) {
+    return {
+      content: "Invalid messages array sent to OpenAI API.",
+      isFromAI: false,
+    };
+  }
+
   try {
+    const requestBody = {
+      model: 'gpt-3.5-turbo',
+      messages,
+      max_tokens: 200,
+      temperature: 0.9,
+      top_p: 0.9,
+    };
+
+    // Log the request for debugging
+    console.log('Sending to OpenAI:', requestBody);
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages,
-        max_tokens: 200,
-        temperature: 0.9,
-        top_p: 0.9,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      // Log the error details from OpenAI
+      console.error('OpenAI API error details:', data);
+      throw new Error(
+        `OpenAI API error: ${response.status} - ${data.error?.message || 'Unknown error'}`
+      );
     }
 
-    const data = await response.json();
     return {
       content: data.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response at the moment.",
       isFromAI: true,
-      confidence: undefined // OpenAI does not return confidence
+      confidence: undefined, // OpenAI does not return confidence
     };
   } catch (error) {
     console.error('OpenAI API Error:', error);
     return {
       content: "I'm having trouble connecting to my AI service right now. Please try again later.",
-      isFromAI: false
+      isFromAI: false,
     };
   }
 };
