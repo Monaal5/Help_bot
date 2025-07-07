@@ -93,5 +93,5 @@ const getFallbackResponse = (message: string, chatbotName: string): string => {
     return "You're welcome! I'm glad I could help, even in demo mode.";
   }
   
-  return `Hi! I'm ${chatbotName}. I'm currently running in demo mode due to API balance limitations. For full AI capabilities, please add funds to your DeepSeek API account at https://platform.deepseek.com/`;
+  return `Hi! I'm ${chatbotName}. I'm currently running in demo mode due to API balance limitations./`;
 };
