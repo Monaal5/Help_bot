@@ -502,12 +502,21 @@ const EditChatbot = () => {
                             className="bg-gray-50 font-mono text-sm"
                           />
                           <Button
-                            onClick={() => {
-                              navigator.clipboard.writeText(`${window.location.origin}/chat/${selectedChatbot.id}`);
-                              toast({
-                                title: "Copied!",
-                                description: "URL copied to clipboard",
-                              });
+                            onClick={async () => {
+                              const url = `${window.location.origin}/chat/${selectedChatbot.id}`;
+                              try {
+                                await navigator.clipboard.writeText(url);
+                                toast({ title: "Copied", description: "Chatbot URL copied" });
+                              } catch (err) {
+                                // Fallback for insecure contexts or denied permissions
+                                const input = document.createElement('input');
+                                input.value = url;
+                                document.body.appendChild(input);
+                                input.select();
+                                document.execCommand('copy');
+                                document.body.removeChild(input);
+                                toast({ title: "Copied", description: "Chatbot URL copied" });
+                              }
                             }}
                             variant="outline"
                             size="sm"

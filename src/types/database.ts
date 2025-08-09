@@ -68,3 +68,15 @@ export interface ChatbotResponse {
   source: 'knowledge-base' | 'ai' | 'fallback';
   isFromAI: boolean;
 }
+
+export interface ViewerPermission {
+  id: string;
+  chatbot_id: string;
+  viewer_email: string;
+  granted_by: string;
+  invitation_token?: string;
+  token_expires_at?: string;
+  created_at: string;
+  updated_at: string;
+  is_active: boolean;
+}

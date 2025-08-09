@@ -34,7 +34,7 @@ export const generateAIResponse = async (
 
   try {
     const requestBody = {
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4.1',
       messages,
       max_tokens: 200,
       temperature: 0.9,

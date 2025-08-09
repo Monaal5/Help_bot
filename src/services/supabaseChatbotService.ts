@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { Chatbot, ChatSession, Message, KnowledgeEntry, Document } from "@/types/database";
+import { Chatbot, ChatSession, Message, KnowledgeEntry, Document, ViewerPermission } from "@/types/database";
 import { DocumentProcessor, ProcessedDocument } from './documentProcessor';
 import { knowledgeBase } from './knowledgeBase';
 import { generateAIResponse } from './openaiService';
@@ -544,6 +544,228 @@ export class SupabaseChatbotService {
       .select('*');
     if (error) throw error;
     return (chatbots || []) as Chatbot[];
+  }
+
+  // Viewer permission methods
+  async createViewerPermission(chatbotId: string, viewerEmail: string, grantedBy: string): Promise<ViewerPermission> {
+    try {
+      // First verify that the user owns the chatbot
+      const { data: chatbot, error: chatbotError } = await supabase
+        .from('chatbots')
+        .select('clerk_user_id')
+        .eq('id', chatbotId)
+        .single();
+
+      if (chatbotError) throw chatbotError;
+
+      if (chatbot.clerk_user_id !== grantedBy) {
+        throw new Error('You can only manage viewers for your own chatbots');
+      }
+
+      const normalizedEmail = (viewerEmail || '').trim().toLowerCase();
+      if (!normalizedEmail) {
+        throw new Error('Viewer email is required');
+      }
+
+      // Generate (or refresh) an invitation token and expiry (7 days)
+      const newToken = `vt_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+      const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      // Upsert to gracefully handle duplicates (reactivate if previously revoked)
+      const { data, error } = await supabase
+        .from('viewer_permissions')
+        .upsert([
+          {
+            chatbot_id: chatbotId,
+            viewer_email: normalizedEmail,
+            granted_by: grantedBy,
+            is_active: true,
+            invitation_token: newToken,
+            token_expires_at: newExpiry,
+            updated_at: new Date().toISOString(),
+          },
+        ], { onConflict: 'chatbot_id,viewer_email' })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as ViewerPermission;
+    } catch (error: any) {
+      // Improve error messaging for uniqueness/conflicts
+      const msg = error?.message || '';
+      if (msg.includes('duplicate key') || msg.includes('conflict') || error?.code === '23505') {
+        throw new Error('This viewer already has access to this chatbot');
+      }
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Failed to create viewer permission');
+    }
+  }
+
+  async getViewerPermissions(chatbotId: string, userId?: string): Promise<ViewerPermission[]> {
+    try {
+      // If userId is provided, verify ownership
+      if (userId) {
+        const { data: chatbot, error: chatbotError } = await supabase
+          .from('chatbots')
+          .select('clerk_user_id')
+          .eq('id', chatbotId)
+          .single();
+
+        if (chatbotError) throw chatbotError;
+
+        if (chatbot.clerk_user_id !== userId) {
+          throw new Error('You can only view permissions for your own chatbots');
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('viewer_permissions')
+        .select('*')
+        .eq('chatbot_id', chatbotId)
+        .eq('is_active', true);
+
+      if (error) throw error;
+      return (data || []) as ViewerPermission[];
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Failed to get viewer permissions');
+    }
+  }
+
+  async revokeViewerPermission(permissionId: string): Promise<void> {
+    const { error } = await supabase
+      .from('viewer_permissions')
+      .update({ is_active: false })
+      .eq('id', permissionId);
+
+    if (error) throw error;
+  }
+
+  async getViewerAccessibleChatbots(viewerEmail: string): Promise<Chatbot[]> {
+    const { data, error } = await supabase
+      .from('viewer_permissions')
+      .select(`
+        chatbot_id,
+        chatbots (
+          id,
+          name,
+          description,
+          system_prompt,
+          clerk_user_id,
+          created_at,
+          updated_at,
+          is_active,
+          settings
+        )
+      `)
+      .eq('viewer_email', viewerEmail)
+      .eq('is_active', true);
+
+    if (error) throw error;
+    return (data?.map((item: any) => item.chatbots).filter(Boolean) || []) as Chatbot[];
+  }
+
+  async getAllSessionsForViewer(viewerEmail: string): Promise<ChatSession[]> {
+    // First get the chatbot IDs that the viewer has access to
+    const { data: permissions, error: permError } = await supabase
+      .from('viewer_permissions')
+      .select('chatbot_id')
+      .eq('viewer_email', viewerEmail)
+      .eq('is_active', true);
+
+    if (permError) throw permError;
+
+    if (!permissions || permissions.length === 0) {
+      return [];
+    }
+
+    const chatbotIds = permissions.map(p => p.chatbot_id);
+
+    // Then get sessions for those chatbots
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .select(`
+        *,
+        chatbots (name)
+      `)
+      .in('chatbot_id', chatbotIds)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []) as ChatSession[];
+  }
+
+  // Invitation token methods
+  async getViewerPermissionByToken(token: string): Promise<ViewerPermission | null> {
+    try {
+      const { data, error } = await supabase
+        .from('viewer_permissions')
+        .select(`
+          *,
+          chatbots (name)
+        `)
+        .eq('invitation_token', token)
+        .eq('is_active', true)
+        .gte('token_expires_at', new Date().toISOString())
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No rows returned
+          return null;
+        }
+        throw error;
+      }
+
+      return data as ViewerPermission;
+    } catch (error) {
+      console.error('Error getting viewer permission by token:', error);
+      return null;
+    }
+  }
+
+  async regenerateInvitationToken(permissionId: string, userId: string): Promise<ViewerPermission> {
+    try {
+      // First verify ownership
+      const { data: permission, error: permError } = await supabase
+        .from('viewer_permissions')
+        .select(`
+          *,
+          chatbots (clerk_user_id)
+        `)
+        .eq('id', permissionId)
+        .single();
+
+      if (permError) throw permError;
+
+      if ((permission as any).chatbots.clerk_user_id !== userId) {
+        throw new Error('You can only regenerate tokens for your own chatbots');
+      }
+
+      // Generate new token and extend expiry
+      const { data, error } = await supabase
+        .from('viewer_permissions')
+        .update({
+          invitation_token: `vt_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
+          token_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', permissionId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as ViewerPermission;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Failed to regenerate invitation token');
+    }
   }
 }
 

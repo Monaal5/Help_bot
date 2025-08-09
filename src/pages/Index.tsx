@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useUser, UserButton } from "@clerk/clerk-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabaseChatbotService } from "@/services/supabaseChatbotService";
+import ManageViewers from "@/components/ManageViewers";
 
 const Index = () => {
   const { user } = useUser();
@@ -21,7 +22,7 @@ const Index = () => {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-2xl font-bold">AI Chatbot Platform</h1>
+              <h1 className="text-2xl font-bold">MedCare</h1>
               <p className="text-muted-foreground">Create and manage your AI-powered chatbots</p>
             </div>
             <div className="flex items-center gap-4">
@@ -141,6 +142,12 @@ const Index = () => {
               </CardContent>
             </Card>
           )}
+        </div>
+
+        {/* Manage Viewers Section */}
+        <div className="mt-12">
+          <h2 className="text-2xl font-bold mb-6">Viewer Management</h2>
+          <ManageViewers chatbots={chatbots || []} />
         </div>
       </main>
     </div>

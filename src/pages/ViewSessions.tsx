@@ -1,189 +1,396 @@
-import { useState } from "react";
-import { ArrowLeft, Search, MessageSquare, Calendar, Clock, User, Bot } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { useNavigate } from "react-router-dom";
-import { useUser } from "@clerk/clerk-react";
+import React, { useState, useEffect } from 'react';
+import { useUser, UserButton } from "@clerk/clerk-react";
 import { useQuery } from "@tanstack/react-query";
-import { getChatSessionsByUserEmail, getAllChatbots, getSessionMessages } from "@/services/supabaseChatbotService";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { MessageSquare, Search, Calendar, User, Bot, Eye, ArrowLeft, Info, CheckCircle } from "lucide-react";
+import { supabaseChatbotService } from "@/services/supabaseChatbotService";
+import { ChatSession, Chatbot, Message } from "@/types/database";
+import { Link } from "react-router-dom";
+import { format } from "date-fns";
 
 const ViewSessions = () => {
-  const navigate = useNavigate();
   const { user } = useUser();
-  const defaultEmail = user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || "";
-  const [searchTerm, setSearchTerm] = useState("");
-  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
-  const [searchEmail, setSearchEmail] = useState(defaultEmail);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedChatbot, setSelectedChatbot] = useState<string>('all');
+  const [selectedSession, setSelectedSession] = useState<ChatSession | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  const { data: sessions = [], isLoading } = useQuery({
-    queryKey: ["sessions", searchEmail],
-    queryFn: () => getChatSessionsByUserEmail(searchEmail),
-    enabled: !!searchEmail,
+  // Check if user is a viewer (has no chatbots but has viewer permissions)
+  const { data: userChatbots } = useQuery({
+    queryKey: ['chatbots', user?.id],
+    queryFn: () => supabaseChatbotService.getChatbotsByUser(user?.id || ''),
+    enabled: !!user?.id,
   });
 
-  const { data: chatbots = [], isLoading: isLoadingChatbots } = useQuery({
-    queryKey: ["all-chatbots"],
-    queryFn: getAllChatbots,
+  const isViewer = userChatbots?.length === 0;
+
+  // Get sessions based on user role
+  const { data: sessions = [], isLoading: sessionsLoading } = useQuery({
+    queryKey: ['sessions', user?.id, selectedChatbot, isViewer],
+    queryFn: async () => {
+      if (isViewer && user?.emailAddresses?.[0]?.emailAddress) {
+        // Viewer: get sessions from permitted chatbots
+        return await supabaseChatbotService.getAllSessionsForViewer(user.emailAddresses[0].emailAddress);
+      } else if (selectedChatbot === 'all') {
+        // Admin: get all sessions from all their chatbots
+        const allSessions: ChatSession[] = [];
+        if (userChatbots) {
+          for (const chatbot of userChatbots) {
+            const chatbotSessions = await supabaseChatbotService.getChatSessionsByChatbot(chatbot.id);
+            allSessions.push(...chatbotSessions);
+          }
+        }
+        return allSessions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      } else {
+        // Admin: get sessions for specific chatbot
+        return await supabaseChatbotService.getChatSessionsByChatbot(selectedChatbot);
+      }
+    },
+    enabled: !!user && (isViewer || !!userChatbots),
   });
 
-  const {
-    data: messages = [],
-    isLoading: isLoadingMessages,
-  } = useQuery({
-    queryKey: ["session-messages", expandedSessionId],
-    queryFn: () => (expandedSessionId ? getSessionMessages(expandedSessionId) : []),
-    enabled: !!expandedSessionId,
+  // Get chatbots for filter dropdown (admin only)
+  const { data: chatbots = [] } = useQuery({
+    queryKey: ['chatbots-for-filter', user?.id],
+    queryFn: () => supabaseChatbotService.getChatbotsByUser(user?.id || ''),
+    enabled: !!user?.id && !isViewer,
   });
 
+  // Get messages for selected session
+  const { data: messages = [] } = useQuery({
+    queryKey: ['session-messages', selectedSession?.id],
+    queryFn: () => selectedSession ? supabaseChatbotService.getMessagesBySession(selectedSession.id) : Promise.resolve([]),
+    enabled: !!selectedSession,
+  });
+
+  // Show onboarding for first-time viewers
+  useEffect(() => {
+    if (isViewer && sessions.length > 0) {
+      const hasSeenOnboarding = localStorage.getItem('viewer-onboarding-seen');
+      if (!hasSeenOnboarding) {
+        setShowOnboarding(true);
+      }
+    }
+  }, [isViewer, sessions.length]);
+
+  // Filter sessions based on search term
   const filteredSessions = sessions.filter(session =>
-    (session.user_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      session.user_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      session.id.toLowerCase().includes(searchTerm.toLowerCase()))
+    session.user_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    session.user_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    session.id.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const getStatusBadge = (isActive: boolean) => {
-    return isActive ? (
-      <Badge className="bg-green-100 text-green-700 border-green-200">Active</Badge>
-    ) : (
-      <Badge variant="secondary">Completed</Badge>
-    );
+  const handleOnboardingComplete = () => {
+    localStorage.setItem('viewer-onboarding-seen', 'true');
+    setShowOnboarding(false);
   };
 
-  const formatTime = (timeString: string) => {
-    return new Date(timeString).toLocaleString();
-  };
+  if (sessionsLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading sessions...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center space-x-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/dashboard")}
-              className="flex items-center"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Dashboard
-            </Button>
-            <div className="flex items-center space-x-2">
-              <div className="p-2 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg">
-                <MessageSquare className="h-6 w-6 text-white" />
+      <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-4">
+              {!isViewer && (
+                <Link to="/dashboard">
+                  <Button variant="ghost" size="sm">
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Back to Dashboard
+                  </Button>
+                </Link>
+              )}
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {isViewer ? 'Session Viewer' : 'Chat Sessions'}
+                </h1>
+                <p className="text-gray-600">
+                  {isViewer ? 'View permitted chat sessions' : 'Monitor and analyze conversations'}
+                </p>
               </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                Chat Sessions
+            </div>
+            <div className="flex items-center gap-4">
+              {isViewer && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  <Eye className="w-3 h-3" />
+                  Viewer Access
+                </Badge>
+              )}
+              <span className="text-sm text-gray-600">
+                {user?.firstName || user?.emailAddresses[0]?.emailAddress}
               </span>
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: "w-8 h-8"
+                  }
+                }}
+              />
             </div>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Chatbot Count */}
-          <div className="mb-6 flex items-center gap-4">
-            <Bot className="h-6 w-6 text-indigo-600" />
-            <span className="text-lg font-semibold">Total Chatbots:</span>
-            <span className="text-2xl font-bold">
-              {isLoadingChatbots ? "..." : chatbots.length}
-            </span>
-          </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Sessions List */}
+          <div className="lg:col-span-1">
+            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" />
+                  Chat Sessions
+                </CardTitle>
 
-          {/* Email Search */}
-          <div className="flex items-center gap-4 mb-4">
-            <Input
-              type="email"
-              placeholder="Enter email to view sessions..."
-              value={searchEmail}
-              onChange={e => setSearchEmail(e.target.value)}
-              className="max-w-xs"
-            />
-            <span className="text-sm text-muted-foreground">(Email used in chat modal)</span>
-          </div>
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    placeholder="Search sessions..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
 
-          {/* Search and Table */}
-          <div className="flex items-center justify-between mb-6">
-            <Input
-              placeholder="Search sessions..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="max-w-xs"
-            />
-          </div>
+                {/* Chatbot Filter (Admin only) */}
+                {!isViewer && chatbots.length > 0 && (
+                  <Select value={selectedChatbot} onValueChange={setSelectedChatbot}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filter by chatbot" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Chatbots</SelectItem>
+                      {chatbots.map((chatbot) => (
+                        <SelectItem key={chatbot.id} value={chatbot.id}>
+                          {chatbot.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </CardHeader>
 
-          {isLoading ? (
-            <div className="text-center py-12 text-muted-foreground">Loading sessions...</div>
-          ) : filteredSessions.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">No sessions found.</div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Session ID</TableHead>
-                  <TableHead>User Name</TableHead>
-                  <TableHead>User Email</TableHead>
-                  <TableHead>Created At</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Messages</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredSessions.map(session => (
-                  <>
-                    <TableRow key={session.id} className="cursor-pointer" onClick={() => setExpandedSessionId(expandedSessionId === session.id ? null : session.id)}>
-                      <TableCell>{session.id}</TableCell>
-                      <TableCell>{session.user_name || "-"}</TableCell>
-                      <TableCell>{session.user_email || "-"}</TableCell>
-                      <TableCell>{formatTime(session.created_at)}</TableCell>
-                      <TableCell>{getStatusBadge(session.is_active)}</TableCell>
-                      <TableCell>
-                        <Button size="sm" variant="outline">
-                          {expandedSessionId === session.id ? "Hide" : "View"}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                    {expandedSessionId === session.id && (
-                      <TableRow>
-                        <TableCell colSpan={6} className="bg-gray-50">
-                          {isLoadingMessages ? (
-                            <div className="text-center py-4 text-muted-foreground">Loading messages...</div>
-                          ) : messages.length === 0 ? (
-                            <div className="text-center py-4 text-muted-foreground">No messages found for this session.</div>
-                          ) : (
-                            <Table className="mt-2">
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Role</TableHead>
-                                  <TableHead>Content</TableHead>
-                                  <TableHead>Date/Time</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {messages.map(msg => (
-                                  <TableRow key={msg.id}>
-                                    <TableCell>{msg.role}</TableCell>
-                                    <TableCell>{msg.content}</TableCell>
-                                    <TableCell>{formatTime(msg.created_at)}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          )}
-                        </TableCell>
-                      </TableRow>
+              <CardContent className="space-y-3 max-h-96 overflow-y-auto">
+                {filteredSessions.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>No sessions found</p>
+                    {isViewer && (
+                      <p className="text-sm mt-2">
+                        Contact an admin to get viewer access to chatbot sessions.
+                      </p>
                     )}
-                  </>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+                  </div>
+                ) : (
+                  filteredSessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className={`p-3 rounded-lg border cursor-pointer transition-all hover:bg-gray-50 ${
+                        selectedSession?.id === session.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200'
+                      }`}
+                      onClick={() => setSelectedSession(session)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-gray-500" />
+                          <span className="font-medium text-sm">
+                            {session.user_name || 'Anonymous'}
+                          </span>
+                        </div>
+                        <Badge variant={session.is_active ? "default" : "secondary"} className="text-xs">
+                          {session.is_active ? "active" : "ended"}
+                        </Badge>
+                      </div>
+
+                      {session.user_email && (
+                        <p className="text-xs text-gray-600 mb-2">{session.user_email}</p>
+                      )}
+
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <Calendar className="w-3 h-3" />
+                        <span>{format(new Date(session.created_at), 'MMM dd, yyyy HH:mm')}</span>
+                      </div>
+
+                      <div className="text-xs text-gray-400 mt-1 truncate">
+                        ID: {session.id}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Session Details */}
+          <div className="lg:col-span-2">
+            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
+              {selectedSession ? (
+                <>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Bot className="h-5 w-5" />
+                        Session Details
+                      </div>
+                      <Badge variant={selectedSession.is_active ? "default" : "secondary"}>
+                        {selectedSession.is_active ? "Active" : "Ended"}
+                      </Badge>
+                    </CardTitle>
+
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="font-medium text-gray-700">User:</span>
+                        <p className="text-gray-600">{selectedSession.user_name || 'Anonymous'}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Email:</span>
+                        <p className="text-gray-600">{selectedSession.user_email || 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Started:</span>
+                        <p className="text-gray-600">
+                          {format(new Date(selectedSession.created_at), 'MMM dd, yyyy HH:mm:ss')}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Last Updated:</span>
+                        <p className="text-gray-600">
+                          {format(new Date(selectedSession.updated_at), 'MMM dd, yyyy HH:mm:ss')}
+                        </p>
+                      </div>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent>
+                    <div className="space-y-4 max-h-96 overflow-y-auto">
+                      {messages.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                          <p>No messages in this session</p>
+                        </div>
+                      ) : (
+                        messages.map((message, index) => (
+                          <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            <div
+                              className={`rounded-lg p-3 max-w-[80%] ${
+                                message.role === 'user'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : message.role === 'assistant'
+                                  ? 'bg-gray-100 text-gray-800'
+                                  : 'bg-yellow-100 text-yellow-800'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs font-medium capitalize">
+                                  {message.role}
+                                </span>
+                                {message.response_source && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {message.response_source}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-sm whitespace-pre-wrap">
+                                {message.content}
+                              </div>
+                              <div className="text-xs opacity-70 mt-2">
+                                {format(new Date(message.created_at), 'HH:mm:ss')}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CardContent>
+                </>
+              ) : (
+                <CardContent className="flex items-center justify-center h-96">
+                  <div className="text-center text-gray-500">
+                    <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                    <h3 className="text-lg font-medium mb-2">Select a Session</h3>
+                    <p>Choose a session from the list to view its details and messages</p>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          </div>
         </div>
       </div>
+
+      {/* Onboarding Dialog for New Viewers */}
+      <Dialog open={showOnboarding} onOpenChange={setShowOnboarding}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5 text-blue-600" />
+              Welcome, Viewer!
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle className="w-5 h-5 text-blue-600" />
+                <span className="font-medium text-blue-800">You have viewer access!</span>
+              </div>
+              <p className="text-blue-700 text-sm">
+                You can view and monitor chat sessions, but you cannot make any changes to the system.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-800">What you can do:</h4>
+              <ul className="space-y-2 text-sm text-gray-600">
+                <li className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-green-600" />
+                  View all chat sessions you have access to
+                </li>
+                <li className="flex items-center gap-2">
+                  <Search className="w-4 h-4 text-green-600" />
+                  Search and filter sessions by user or content
+                </li>
+                <li className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-green-600" />
+                  See user information and conversation details
+                </li>
+                <li className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-green-600" />
+                  Monitor session timestamps and activity
+                </li>
+              </ul>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-yellow-800 text-sm">
+                <Info className="w-4 h-4 inline mr-1" />
+                <strong>Note:</strong> You can only view sessions from chatbots you've been granted access to.
+              </p>
+            </div>
+
+            <Button onClick={handleOnboardingComplete} className="w-full">
+              Got it, let's start!
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
