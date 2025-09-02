@@ -35,7 +35,7 @@ const queryClient = new QueryClient({
 });
 
 // Use the provided Clerk publishable key directly as requested
-const PUBLISHABLE_KEY = "pk_test_bW9kZWwtbGFicmFkb3ItMTIuY2xlcmsuYWNjb3VudHMuZGV2JA";
+const PUBLISHABLE_KEY = "pk_test_aGVscGZ1bC1nYXItNTAuY2xlcmsuYWNjb3VudHMuZGV2JA";
 
 if (!PUBLISHABLE_KEY) {
   throw new Error("Missing Clerk Publishable Key. Please check your environment variables.");

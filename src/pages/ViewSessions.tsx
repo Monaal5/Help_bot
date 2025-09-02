@@ -224,6 +224,10 @@ const ViewSessions = () => {
                       {session.user_email && (
                         <p className="text-xs text-gray-600 mb-2">{session.user_email}</p>
                       )}
+                      {session.phone_number && (
+                        <p className="text-xs text-gray-600 mb-2">{session.phone_number}</p>
+                      )}
+
 
                       <div className="flex items-center gap-2 text-xs text-gray-500">
                         <Calendar className="w-3 h-3" />
@@ -264,6 +268,10 @@ const ViewSessions = () => {
                       <div>
                         <span className="font-medium text-gray-700">Email:</span>
                         <p className="text-gray-600">{selectedSession.user_email || 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Phone_Number:</span>
+                        <p className="text-gray-600">{selectedSession.phone_number || 'Not provided'}</p>
                       </div>
                       <div>
                         <span className="font-medium text-gray-700">Started:</span>

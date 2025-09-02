@@ -42,7 +42,10 @@ export const ViewerGuard = ({ children, allowViewerAccess = false }: ViewerGuard
     return <Navigate to="/auth" replace />;
   }
 
-  const isAdmin = userChatbots && userChatbots.length > 0;
+  // Check Clerk metadata for admin role
+  const clerkIsAdmin = user?.publicMetadata?.role === "admin";
+  const isAdmin = clerkIsAdmin || (userChatbots && userChatbots.length > 0);
+
   const isViewer = !isAdmin && viewerChatbots && viewerChatbots.length > 0;
   const hasNoAccess = !isAdmin && !isViewer;
 

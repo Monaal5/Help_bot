@@ -186,7 +186,7 @@ export class SupabaseChatbotService {
     }
   }
 
-  async createChatSession(chatbotId: string, userData?: { name?: string; email?: string }): Promise<ChatSession> {
+  async createChatSession(chatbotId: string, userData?: { name?: string; email?: string; phone_number?: string }): Promise<ChatSession> {
     try {
       validateId(chatbotId);
 
@@ -196,6 +196,7 @@ export class SupabaseChatbotService {
           chatbot_id: chatbotId,
           user_name: userData?.name,
           user_email: userData?.email,
+          phone_number: userData?.phone_number,
           session_data: {}
         }])
         .select()

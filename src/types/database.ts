@@ -30,6 +30,7 @@ export interface ChatSession {
   chatbot_id: string;
   user_name?: string;
   user_email?: string;
+  phone_number?: string;
   session_data: any; // Changed from Record<string, any> to any
   created_at: string;
   updated_at: string;

@@ -36,6 +36,7 @@ const ChatbotPage = () => {
   const [showUserModal, setShowUserModal] = useState(true);
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
+  const [userPhone, setUserPhone] = useState('');
 
   // Get chatbot details
   const { data: chatbot, isLoading: chatbotLoading } = useQuery({
@@ -47,11 +48,12 @@ const ChatbotPage = () => {
   // Create session on mount (after user info is provided)
   useEffect(() => {
     const initSession = async () => {
-      if (chatbotId && !sessionId && userName && userEmail) {
+      if (chatbotId && !sessionId && userName && userEmail && userPhone) {
         try {
           const session = await supabaseChatbotService.createChatSession(chatbotId, {
             name: userName,
             email: userEmail,
+            phone_number: userPhone
           });
           setSessionId(session.id);
           // Load existing messages if any
@@ -151,13 +153,13 @@ const ChatbotPage = () => {
         <Card className="w-full max-w-sm p-6">
           <CardHeader>
             <CardTitle>Enter your details</CardTitle>
-            <CardDescription>To start chatting, please provide your name and email.</CardDescription>
+            <CardDescription>To start chatting, please provide your name, email, and phone number (with country code).</CardDescription>
           </CardHeader>
           <CardContent>
             <form
               onSubmit={e => {
                 e.preventDefault();
-                if (userName.trim() && userEmail.trim()) {
+                if (userName.trim() && userEmail.trim() && userPhone.trim()) {
                   setShowUserModal(false);
                 }
               }}
@@ -180,6 +182,16 @@ const ChatbotPage = () => {
                   value={userEmail}
                   onChange={e => setUserEmail(e.target.value)}
                   required
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Phone Number (with country code)</label>
+                <Input
+                  type="tel"
+                  value={userPhone}
+                  onChange={e => setUserPhone(e.target.value)}
+                  required
+                  placeholder="e.g. +1 555 1234567"
                 />
               </div>
               <Button type="submit" className="w-full mt-2">Start Chatting</Button>

@@ -68,6 +68,7 @@ const validateChatbotName = (name: string): void => {
 export const generateChatbotResponse = async (
   message: string,
   chatbotId: string,
+  sessionId?: string,
   conversationHistory: Message[] = []
 ): Promise<ChatbotResponse> => {
   try {
@@ -78,6 +79,42 @@ export const generateChatbotResponse = async (
     const chatbot = await supabaseChatbotService.getChatbotById(chatbotId);
     if (!chatbot) throw new ChatbotServiceError('Chatbot not found', ERROR_CODES.INVALID_INPUT);
     const systemPrompt = chatbot.system_prompt || `You are ${chatbot.name}, a helpful AI assistant. Use the provided knowledge base entry to answer as intelligently, creatively, and conversationally as possible.`;
+
+    // If user greets, check phone number and suggest languages
+   const greetings = ['hi', 'hello', 'hey', 'heyy', 'hii', 'hai', 'hola', 'bonjour', 'namaste'];
+    if (sessionId && greetings.some(greet => message.trim().toLowerCase().startsWith(greet))) {
+      // Fetch session info
+      let session;
+      try {
+        session = await supabaseChatbotService.getChatSessionsByChatbot(chatbotId)
+          .then (sessions => Array.isArray(sessions) ? sessions.find(s => s.id === sessionId) : null);
+      } catch {}
+      let phone = session?.phone_number || '';
+      let countryCode = '';
+      if (phone.startsWith('+')) {
+        countryCode = phone.split(' ')[0].replace('+', '');
+      }
+      // Simple country code to language mapping
+      const countryLangs: Record<string, string[]> = {
+        '1': ['English', 'Spanish', 'French'], // US/Canada
+        '91': ['Hindi', 'English', 'Bengali', 'Tamil', 'Telugu'], // India
+        '44': ['English', 'Welsh', 'Scottish Gaelic'], // UK
+        '49': ['German', 'English'], // Germany
+        '33': ['French', 'English'], // France
+        '81': ['Japanese', 'English'], // Japan
+        '86': ['Mandarin', 'Cantonese', 'English'], // China
+        // Add more as needed
+      };
+      let langs = ['English'];
+      if (countryCode && countryLangs[countryCode]) {
+        langs = countryLangs[countryCode];
+      }
+      return {
+        content: `Hey!${countryCode ? ` Based on your country code (+${countryCode}),` : ''} which language are you comfortable with? ${langs.join(', ')}`,
+        source: 'ai',
+        isFromAI: true
+      };
+    }
 
     // Get all KB entries for this chatbot
     const allKnowledgeEntries = await supabaseChatbotService.getKnowledgeEntries(chatbotId);
