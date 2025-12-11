@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Bot, MessageSquare, Settings, ExternalLink, Plus } from "lucide-react";
+import { Bot, Plus, MessageSquare, Settings, ExternalLink, Image } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useUser, UserButton } from "@clerk/clerk-react";
@@ -115,6 +115,11 @@ const Index = () => {
                         <Link to={`/chat/${chatbot.id}`}>
                           <MessageSquare className="w-4 h-4 mr-2" />
                           Chat
+                        </Link>
+                      </Button>
+                      <Button asChild variant="outline" size="sm">
+                        <Link to={`/media/${chatbot.id}`}>
+                          <Image className="w-4 h-4" />
                         </Link>
                       </Button>
                       <Button asChild variant="outline" size="sm">

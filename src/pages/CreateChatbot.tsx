@@ -1,17 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useUser } from "@clerk/clerk-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabaseChatbotService } from "@/services/supabaseChatbotService";
 import { DocumentProcessor } from "@/services/documentProcessor";
-import { supabase } from "@/integrations/supabase/client";
-import { useUser } from "@clerk/clerk-react";
-import { Plus, Trash2, Upload, Bot, Loader2 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
+import { Plus, Trash2, Upload, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface KnowledgeEntry {
   question: string;

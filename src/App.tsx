@@ -15,12 +15,12 @@ const CreateChatbot = lazy(() => import("./pages/CreateChatbot"));
 const ViewSessions = lazy(() => import("./pages/ViewSessions"));
 const EditChatbot = lazy(() => import("./pages/EditChatbot"));
 const ChatbotPage = lazy(() => import("./pages/ChatbotPage"));
+const MediaManagement = lazy(() => import("./pages/MediaManagement"));
 const ViewerInvitation = lazy(() => import("./pages/ViewerInvitation"));
 const Auth = lazy(() => import("./pages/Auth"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Components
-import { AuthGuard } from "./components/AuthGuard";
 import { ViewerGuard } from "./components/ViewerGuard";
 
 // Configuration
@@ -58,6 +58,7 @@ const App = () => (
                 <Route path="/create-chatbot" element={<ViewerGuard><CreateChatbot /></ViewerGuard>} />
                 <Route path="/view-sessions" element={<ViewerGuard allowViewerAccess={true}><ViewSessions /></ViewerGuard>} />
                 <Route path="/edit-chatbot" element={<ViewerGuard><EditChatbot /></ViewerGuard>} />
+                <Route path="/media/:chatbotId" element={<ViewerGuard><MediaManagement /></ViewerGuard>} />
                 <Route path="/chat/:chatbotId" element={<ChatbotPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

@@ -42,7 +42,7 @@ export interface Message {
   session_id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
-  response_source?: 'knowledge_base' | 'generative' | 'hybrid';
+  response_source?: 'knowledge_base' | 'generative' | 'hybrid' | 'media-database' | 'error';
   metadata: any; // Changed from Record<string, any> to any
   created_at: string;
 }
@@ -77,6 +77,31 @@ export interface ViewerPermission {
   granted_by: string;
   invitation_token?: string;
   token_expires_at?: string;
+  created_at: string;
+  updated_at: string;
+  is_active: boolean;
+}
+
+export interface MediaItem {
+  id: string;
+  chatbot_id: string;
+  title: string;
+  description?: string;
+  media_type: 'image' | 'video';
+  file_name: string;
+  file_url: string;
+  file_size?: number;
+  mime_type?: string;
+  tags?: string[];
+  keywords?: string[];
+  alt_text?: string;
+  thumbnail_url?: string;
+  duration?: number; // For videos (in seconds)
+  dimensions?: {
+    width: number;
+    height: number;
+  };
+  metadata: any;
   created_at: string;
   updated_at: string;
   is_active: boolean;

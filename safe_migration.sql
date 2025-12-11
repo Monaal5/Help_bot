@@ -1,26 +1,4 @@
--- Enable the pgvector extension to work with embedding vectors
-CREATE EXTENSION IF NOT EXISTS vector;
-
--- Create custom types safely
-DO $$ BEGIN
-    CREATE TYPE document_status AS ENUM ('processing', 'completed', 'failed');
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
-
-DO $$ BEGIN
-    CREATE TYPE message_role AS ENUM ('user', 'assistant', 'system');
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
-
-DO $$ BEGIN
-    CREATE TYPE response_source AS ENUM ('knowledge_base', 'llm', 'fallback');
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
-
--- Create tables
+-- Create tables if they don't exist
 CREATE TABLE IF NOT EXISTS public.chatbots (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   name character varying NOT NULL,

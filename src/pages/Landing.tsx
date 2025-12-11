@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { useQuery } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";

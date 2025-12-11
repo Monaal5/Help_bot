@@ -1,5 +1,5 @@
 import { knowledgeBase } from './knowledgeBase';
-import { generateAIResponse, OpenAIResponse } from './openaiService';
+import { generateAIResponse } from './geminiService';
 import { supabaseChatbotService } from './supabaseChatbotService';
 
 // Types
@@ -81,14 +81,14 @@ export const generateChatbotResponse = async (
     const systemPrompt = chatbot.system_prompt || `You are ${chatbot.name}, a helpful AI assistant. Use the provided knowledge base entry to answer as intelligently, creatively, and conversationally as possible.`;
 
     // If user greets, check phone number and suggest languages
-   const greetings = ['hi', 'hello', 'hey', 'heyy', 'hii', 'hai', 'hola', 'bonjour', 'namaste'];
+    const greetings = ['hi', 'hello', 'hey', 'heyy', 'hii', 'hai', 'hola', 'bonjour', 'namaste'];
     if (sessionId && greetings.some(greet => message.trim().toLowerCase().startsWith(greet))) {
       // Fetch session info
       let session;
       try {
         session = await supabaseChatbotService.getChatSessionsByChatbot(chatbotId)
-          .then (sessions => Array.isArray(sessions) ? sessions.find(s => s.id === sessionId) : null);
-      } catch {}
+          .then(sessions => Array.isArray(sessions) ? sessions.find(s => s.id === sessionId) : null);
+      } catch { }
       let phone = session?.phone_number || '';
       let countryCode = '';
       if (phone.startsWith('+')) {
@@ -169,9 +169,9 @@ export const generateChatbotResponse = async (
       { role: 'system', content: systemPrompt },
       ...(kbEntry
         ? [{
-            role: 'system' as const,
-            content: `Here is the most relevant knowledge base entry for this conversation:\nQ: ${kbEntry.question}\nA: ${kbEntry.answer}`
-          }]
+          role: 'system' as const,
+          content: `Here is the most relevant knowledge base entry for this conversation:\nQ: ${kbEntry.question}\nA: ${kbEntry.answer}`
+        }]
         : []),
       ...safeHistory,
       { role: 'user', content: message }
@@ -203,7 +203,7 @@ export const initializeChatbotKnowledge = async (
 ): Promise<void> => {
   try {
     console.log('Initializing chatbot knowledge...');
-    
+
     // Add text data to knowledge base
     if (textData.trim()) {
       try {

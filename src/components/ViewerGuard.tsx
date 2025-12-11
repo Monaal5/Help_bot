@@ -1,5 +1,5 @@
 import { useUser } from "@clerk/clerk-react";
-import { ReactNode, useEffect } from "react";
+import { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabaseChatbotService } from "@/services/supabaseChatbotService";

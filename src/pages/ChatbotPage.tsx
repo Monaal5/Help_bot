@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Bot, MessageSquare, Loader2, Settings } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Bot, MessageSquare, Loader2 } from 'lucide-react';
+import { useQuery } from "@tanstack/react-query";
 import { supabaseChatbotService, generateChatbotResponse } from "@/services/supabaseChatbotService";
 import { useToast } from "@/hooks/use-toast";
-import ReactMarkdown from 'react-markdown';
+import { MediaDisplay } from '@/components/MediaDisplay';
+import { MediaItem } from '@/types/database';
 
 // Animated vertical three dots component
 const AnimatedDots = () => (
@@ -20,7 +21,7 @@ const AnimatedDots = () => (
 
 const ChatbotPage = () => {
   const { chatbotId } = useParams();
-  const [messages, setMessages] = useState<Array<{role: string, content: string, timestamp: Date}>>([]);
+  const [messages, setMessages] = useState<Array<{role: string, content: string, timestamp: Date, media?: MediaItem[]}>>([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,7 +40,7 @@ const ChatbotPage = () => {
   const [userPhone, setUserPhone] = useState('');
 
   // Get chatbot details
-  const { data: chatbot, isLoading: chatbotLoading } = useQuery({
+  const { data: chatbot } = useQuery({
     queryKey: ['chatbot', chatbotId],
     queryFn: () => supabaseChatbotService.getChatbotById(chatbotId!),
     enabled: !!chatbotId,
@@ -108,43 +109,64 @@ const ChatbotPage = () => {
     }
   }, [typewriter]);
 
+
   const sendMessage = async () => {
-    if (!currentMessage.trim() || !sessionId || !chatbotId) return;
-    setIsLoading(true);
-    const userMessage = currentMessage;
+    if (!currentMessage.trim() || !sessionId) return;
+
+    const userMessage = currentMessage.trim();
     setCurrentMessage('');
+    setIsLoading(true);
+
+    // Add user message to UI immediately
+    const newUserMessage = {
+      role: 'user',
+      content: userMessage,
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, newUserMessage]);
+
     try {
-      setMessages(prev => [...prev, {
-        role: 'user',
-        content: userMessage,
-        timestamp: new Date()
-      }]);
-      // Generate response
-      const response = await generateChatbotResponse(userMessage, chatbotId, sessionId);
-      // Add a placeholder for assistant message
-      setMessages(prev => [...prev, {
+      // Generate response (backend will handle media commands)
+      const response = await generateChatbotResponse(
+        userMessage,
+        chatbotId!,
+        sessionId
+      );
+
+      // Add AI response with media if present
+      const aiMessage = {
         role: 'assistant',
-        content: '',
-        timestamp: new Date()
-      }]);
-      setTypewriter({ index: 0, words: response.content.split(' '), current: '' });
-    } catch (error: any) {
+        content: response.content,
+        timestamp: new Date(),
+        media: response.media || undefined
+      };
+      
+      setMessages(prev => [...prev, aiMessage]);
+      
+      // Only start typewriter effect for AI-generated responses (not media responses)
+      if (response.isFromAI) {
+        const words = response.content.split(' ');
+        setTypewriter({ index: 0, words, current: '' });
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
       toast({
-        variant: "destructive",
-        description: error.message || "Failed to send message. Please try again."
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+        variant: "destructive"
       });
+      
+      // Add error message
+      const errorMessage = {
+        role: 'assistant',
+        content: 'Sorry, I encountered an error. Please try again.',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
   };
-
-  if (chatbotLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
-      </div>
-    );
-  }
 
   // User info modal
   if (showUserModal) {
@@ -236,37 +258,35 @@ const ChatbotPage = () => {
 
           <CardContent className="flex-1 overflow-y-auto p-4">
             <div className="space-y-4">
-              {messages.map((msg, index) => (
-                <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div 
-                    className={`rounded-lg p-3 w-fit max-w-[80%] ${
-                      msg.role === 'user' 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'bg-white text-gray-800 shadow-sm'
-                    }`}
-                  >
-                    {msg.role === 'assistant' ? (
-                      <div className="prose prose-sm max-w-none">
-                        <ReactMarkdown
-                          components={{
-                            a: ({node, ...props}) => (
-                              <a
-                                {...props}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 underline hover:text-blue-800 transition-colors duration-150 cursor-pointer"
-                              />
-                            )
-                          }}
-                        >
-                          {index === messages.length - 1 && typewriter.index >= 0 ? typewriter.current : msg.content}
-                        </ReactMarkdown>
-                      </div>
+              {messages.map((message, index) => (
+                <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
+                  <div className={`max-w-[80%] p-3 rounded-lg ${
+                    message.role === 'user' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-100 text-gray-900'
+                  }`}>
+                    {message.role === 'assistant' && index === messages.length - 1 && typewriter.index >= 0 ? (
+                      <div>{typewriter.current}</div>
                     ) : (
-                      msg.content
+                      <div>{message.content}</div>
                     )}
-                    <div className="text-xs text-gray-500 mt-1 text-right">
-                      {msg.timestamp.toLocaleTimeString()}
+                    
+                    {/* Display media if present */}
+                    {message.media && message.media.length > 0 && (
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {message.media.map((media) => (
+                          <MediaDisplay
+                            key={media.id}
+                            media={media}
+                            showDetails={false}
+                            className="max-w-xs"
+                          />
+                        ))}
+                      </div>
+                    )}
+                    
+                    <div className="text-xs opacity-70 mt-1">
+                      {message.timestamp.toLocaleTimeString()}
                     </div>
                   </div>
                 </div>
@@ -286,7 +306,7 @@ const ChatbotPage = () => {
             <div className="flex items-center space-x-2">
               <Input
                 type="text"
-                placeholder="Type your message..."
+                placeholder="Ask me anything or try: 'show me images of medical equipment' or 'I want videos about patient care'"
                 value={currentMessage}
                 onChange={(e) => setCurrentMessage(e.target.value)}
                 onKeyDown={(e) => {
@@ -296,6 +316,7 @@ const ChatbotPage = () => {
                   }
                 }}
                 disabled={isLoading}
+                className="flex-1"
               />
               <Button onClick={sendMessage} disabled={isLoading || !currentMessage.trim()}>
                 {isLoading ? (
@@ -308,6 +329,7 @@ const ChatbotPage = () => {
             </div>
           </div>
         </Card>
+
       </div>
     </div>
   );

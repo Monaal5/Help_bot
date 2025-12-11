@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useUser, UserButton } from "@clerk/clerk-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MessageSquare, Search, Calendar, User, Bot, Eye, ArrowLeft, Info, CheckCircle } from "lucide-react";
 import { supabaseChatbotService } from "@/services/supabaseChatbotService";
-import { ChatSession, Chatbot, Message } from "@/types/database";
+import { ChatSession } from "@/types/database";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
 
@@ -296,7 +296,7 @@ const ViewSessions = () => {
                           <p>No messages in this session</p>
                         </div>
                       ) : (
-                        messages.map((message, index) => (
+                        messages.map((message) => (
                           <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div
                               className={`rounded-lg p-3 max-w-[80%] ${

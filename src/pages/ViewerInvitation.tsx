@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { useUser } from "@clerk/clerk-react";
 import { useQuery } from "@tanstack/react-query";
@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Eye, CheckCircle, XCircle, Clock, Mail } from "lucide-react";
 import { supabaseChatbotService } from "@/services/supabaseChatbotService";
-import { ViewerPermission } from "@/types/database";
 
 const ViewerInvitation = () => {
   const { token } = useParams<{ token: string }>();

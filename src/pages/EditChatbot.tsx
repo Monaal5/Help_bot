@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Bot, Save, Trash2, Search, Edit3, FileText, Plus, Upload, Download, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Bot, Save, Trash2, Search, Edit3, Plus, Upload, Download, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { useUser } from "@clerk/clerk-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabaseChatbotService } from "@/services/supabaseChatbotService";
-import { Chatbot, KnowledgeEntry, Document } from "@/types/database";
+import { Chatbot, KnowledgeEntry } from "@/types/database";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -35,7 +35,6 @@ const EditChatbot = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [knowledgeEntries, setKnowledgeEntries] = useState<KnowledgeEntryForm[]>([]);
   const [documents, setDocuments] = useState<File[]>([]);
-  const [existingDocuments, setExistingDocuments] = useState<Document[]>([]);
   const [categories, setCategories] = useState<{ category: string; subcategories: string[] }[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('all');

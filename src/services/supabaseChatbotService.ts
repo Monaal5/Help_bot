@@ -1,8 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
-import { Chatbot, ChatSession, Message, KnowledgeEntry, Document, ViewerPermission } from "@/types/database";
-import { DocumentProcessor, ProcessedDocument } from './documentProcessor';
-import { knowledgeBase } from './knowledgeBase';
-import { generateAIResponse } from './openaiService';
+import { Chatbot, Message, KnowledgeEntry, ChatSession, Document, ViewerPermission } from "@/types/database";
+import { generateAIResponse } from './geminiService';
 
 // Custom error class for Supabase service errors
 export class SupabaseServiceError extends Error {
@@ -54,7 +52,7 @@ export class SupabaseChatbotService {
   }): Promise<Chatbot> {
     try {
       validateChatbotData(data);
-      
+
       const { data: chatbot, error } = await supabase
         .from('chatbots')
         .insert([{
@@ -226,7 +224,7 @@ export class SupabaseChatbotService {
   async addMessage(sessionId: string, message: {
     role: 'user' | 'assistant' | 'system';
     content: string;
-    response_source?: 'knowledge_base' | 'generative' | 'hybrid';
+    response_source?: 'knowledge_base' | 'llm' | 'fallback';
     metadata?: Record<string, unknown>;
   }): Promise<Message> {
     try {
@@ -369,7 +367,7 @@ export class SupabaseChatbotService {
 
     // If content exists, create chunks
     if (data.content) {
-      const chunks = DocumentProcessor.chunkContent(data.content);
+      const chunks = this.chunkContent(data.content);
       for (let i = 0; i < chunks.length; i++) {
         await this.createDocumentChunk(document.id, chunks[i], i);
       }
@@ -768,6 +766,28 @@ export class SupabaseChatbotService {
       throw new Error('Failed to regenerate invitation token');
     }
   }
+
+  // Helper method for chunking content
+  private chunkContent(content: string, chunkSize: number = 1000): string[] {
+    const chunks: string[] = [];
+    const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
+
+    let currentChunk = '';
+    for (const sentence of sentences) {
+      if (currentChunk.length + sentence.length > chunkSize && currentChunk.length > 0) {
+        chunks.push(currentChunk.trim());
+        currentChunk = sentence;
+      } else {
+        currentChunk += (currentChunk ? '. ' : '') + sentence;
+      }
+    }
+
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk.trim());
+    }
+
+    return chunks;
+  }
 }
 
 // Create a singleton instance
@@ -776,17 +796,17 @@ export const supabaseChatbotService = new SupabaseChatbotService();
 // Export helper functions
 export const getChatbots = (clerkUserId: string) => supabaseChatbotService.getChatbotsByUser(clerkUserId);
 export const getChatbot = (id: string) => supabaseChatbotService.getChatbotById(id);
-export const createChatSession = (chatbotId: string, userData?: { name?: string; email?: string }) => 
+export const createChatSession = (chatbotId: string, userData?: { name?: string; email?: string }) =>
   supabaseChatbotService.createChatSession(chatbotId, userData);
 export const getSessionMessages = (sessionId: string) => supabaseChatbotService.getMessagesBySession(sessionId);
 export const getChatSessionsByUserEmail = (userEmail: string) =>
   supabaseChatbotService.getChatSessionsByUserEmail(userEmail);
 export const getAllChatbots = () => supabaseChatbotService.getAllChatbots();
 
-// Updated generateChatbotResponse function with enhanced intelligence
+// Updated generateChatbotResponse function with media command support
 export const generateChatbotResponse = async (message: string, chatbotId: string, sessionId: string) => {
   console.log(`Generating response for message: "${message}" in chatbot: ${chatbotId}`);
-  
+
   try {
     // Get chatbot details
     const chatbot = await supabaseChatbotService.getChatbotById(chatbotId);
@@ -800,13 +820,120 @@ export const generateChatbotResponse = async (message: string, chatbotId: string
       content: message
     });
 
-    // Use only the system_prompt for the response
+    // Check for media commands BEFORE processing with AI
+    console.log(`Checking message for media commands: "${message}"`);
+    console.log('Message length:', message.length);
+    console.log('Message char codes:', message.split('').map(c => c.charCodeAt(0)));
+
+    // Multiple ways to request images
+    const imageMatch = message.match(/"image"\s*:\s*"([^"]+)"/i) ||
+      message.match(/image\s*:\s*"([^"]+)"/i) ||
+      message.match(/:image:\s*["""''](.*?)["""'']/i) ||
+      message.match(/:image:\s*"(.*?)"/i) ||
+      message.match(/:image:\s*'(.*?)'/i) ||
+      // Natural language patterns for images
+      message.match(/(?:show me|find|get|i want|need|looking for)\s+(?:some\s+)?(?:images?|pictures?|photos?)\s+(?:of|about|related to|for)\s+(.+)/i) ||
+      message.match(/(?:can you|could you)\s+(?:show|find|get)\s+(?:me\s+)?(?:some\s+)?(?:images?|pictures?|photos?)\s+(?:of|about|related to|for)\s+(.+)/i) ||
+      message.match(/(?:images?|pictures?|photos?)\s+(?:of|about|related to|for)\s+(.+)/i) ||
+      message.match(/(?:show|display)\s+(?:images?|pictures?|photos?)\s+(.+)/i);
+
+    // Multiple ways to request videos  
+    const videoMatch = message.match(/"video"\s*:\s*"([^"]+)"/i) ||
+      message.match(/video\s*:\s*"([^"]+)"/i) ||
+      message.match(/:video:\s*["""''](.*?)["""'']/i) ||
+      message.match(/:video:\s*"(.*?)"/i) ||
+      message.match(/:video:\s*'(.*?)'/i) ||
+      // Natural language patterns for videos
+      message.match(/(?:show me|find|get|i want|need|looking for)\s+(?:some\s+)?videos?\s+(?:of|about|related to|for)\s+(.+)/i) ||
+      message.match(/(?:can you|could you)\s+(?:show|find|get)\s+(?:me\s+)?(?:some\s+)?videos?\s+(?:of|about|related to|for)\s+(.+)/i) ||
+      message.match(/videos?\s+(?:of|about|related to|for)\s+(.+)/i) ||
+      message.match(/(?:show|display)\s+videos?\s+(.+)/i);
+
+    console.log('Image match:', imageMatch);
+    console.log('Video match:', videoMatch);
+
+    if (imageMatch || videoMatch) {
+      const searchQuery = imageMatch ? imageMatch[1] : videoMatch![1];
+      const mediaType = imageMatch ? 'image' : 'video';
+
+      console.log(`Media command detected: ${mediaType} search for "${searchQuery}"`);
+
+      try {
+        // Search for media in database
+        const { data: mediaResults, error: mediaError } = await supabase
+          .from('media_items')
+          .select('*')
+          .eq('chatbot_id', chatbotId)
+          .eq('media_type', mediaType)
+          .eq('is_active', true)
+          .or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%,tags.cs.{${searchQuery}},keywords.cs.{${searchQuery}}`)
+          .limit(3);
+
+        if (mediaError) {
+          console.error('Media search error:', mediaError);
+          throw mediaError;
+        }
+
+        let responseContent: string;
+        if (mediaResults && mediaResults.length > 0) {
+          responseContent = `Here are the ${mediaType}s I found for "${searchQuery}":`;
+          console.log(`Found ${mediaResults.length} media items`);
+
+          // Log the assistant response
+          await supabaseChatbotService.addMessage(sessionId, {
+            role: 'assistant',
+            content: responseContent,
+            response_source: 'llm'
+          });
+
+          return {
+            content: responseContent,
+            source: 'media-database',
+            isFromAI: false,
+            media: mediaResults
+          };
+        } else {
+          responseContent = `Sorry, I couldn't find any ${mediaType}s matching "${searchQuery}". Try different keywords.`;
+          console.log('No media results found');
+        }
+
+        await supabaseChatbotService.addMessage(sessionId, {
+          role: 'assistant',
+          content: responseContent,
+          response_source: 'llm'
+        });
+
+        return {
+          content: responseContent,
+          source: 'media-database',
+          isFromAI: false
+        };
+
+      } catch (mediaSearchError) {
+        console.error('Error searching media:', mediaSearchError);
+        const errorContent = `Sorry, I encountered an error searching for ${mediaType}s. Please try again.`;
+
+        await supabaseChatbotService.addMessage(sessionId, {
+          role: 'assistant',
+          content: errorContent,
+          response_source: 'llm'
+        });
+
+        return {
+          content: errorContent,
+          source: 'error',
+          isFromAI: false
+        };
+      }
+    }
+
+    // For non-media commands, use the AI system prompt
     if (!chatbot.system_prompt || chatbot.system_prompt.trim().length === 0) {
       const fallback = "I'm sorry, I don't have enough information to answer that right now.";
       await supabaseChatbotService.addMessage(sessionId, {
         role: 'assistant',
         content: fallback,
-        response_source: 'generative'
+        response_source: 'llm'
       });
       return {
         content: fallback,
@@ -826,7 +953,7 @@ export const generateChatbotResponse = async (message: string, chatbotId: string
     await supabaseChatbotService.addMessage(sessionId, {
       role: 'assistant',
       content: aiResponse.content,
-      response_source: 'generative'
+      response_source: 'llm'
     });
 
     return {
