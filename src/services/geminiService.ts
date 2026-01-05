@@ -72,14 +72,12 @@ export const generateAIResponse = async (
         console.log('Sending to Gemini:', prompt);
 
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            // Actually, let's use the one they requested if it's likely to exist, or a standard one. 
-            // The user's snippet said "gemini-2.5-flash". I will use that.
+            model: "gemini-1.5-flash",
             contents: prompt,
             config: {
                 temperature: 0.9,
                 topP: 0.9,
-                maxOutputTokens: 200,
+                maxOutputTokens: 2048,
             }
         });
 
